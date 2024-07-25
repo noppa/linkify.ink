@@ -1,7 +1,13 @@
 {
 	"compilerOptions": {
 		"checkJs": true,
-		"target": "ES2017",
-		"moduleResolution": "Node"
-	}
+		"strict": true,
+		"target": "ES2023"
+	},
+	"include": [
+		"index.mjs"
+	],
+	"exclude": [
+		"vendors/tarjs/tarjs.mjs"
+	]
 }

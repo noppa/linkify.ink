@@ -2,11 +2,27 @@
 <html>
 	<head>
 		<meta charset="UTF-8" />
-		<title>title</title>
+		<title>linkify.ink</title>
 		<link rel="stylesheet" type="text/css" href="styles.css" />
-		<script type="module" src="index.mjs"></script>
 	</head>
 	<body>
-		<h1>Hello World!</h1>
+		<header>
+			<a class="logo" href="#"><h1>linkify.ink</h1></a>
+			<p>Embed and send files to your friends with a link.</p>
+		</header>
+		<main>
+			<div>
+				<input type="file" id="file" multiple />
+				<label for="file" id="file-label">Choose a file</label>
+			</div>
+
+			<section>
+				<h2>Files</h2>
+
+				<ul id="file-list"></ul>
+			</section>
+		</main>
+
+		<script type="module" src="index.mjs"></script>
 	</body>
 </html>

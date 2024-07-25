@@ -1,5 +1,17 @@
-h1 {
+:root {
+	color-scheme: light dark;
+
+	--light-bg: ghostwhite;
+	--light-color: darkslategray;
+	--light-code: tomato;
+
+	--dark-bg: darkslategray;
+	--dark-color: ghostwhite;
+	--dark-code: gold;
+}
+
+body {
 	text-align: center;
 	font-family: Calibri, Verdana, sans-serif;
-	color: #232323;
+	color: light-dark(var(--light-color) var(--dark-color));
 }
