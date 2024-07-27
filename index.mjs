@@ -18,13 +18,19 @@ function assertNotNil(
 
 const fileInput = assertNotNil(document.getElementById('file'));
 const fileList = assertNotNil(document.getElementById('file-list'));
+const linkEl = /** @type {HTMLAnchorElement} */ (
+	assertNotNil(document.getElementById('link'))
+);
 
 const tarWriter = new TarWriter();
+
+const { hash } = location;
+console.log('Hash length: ', hash.length);
 
 /**
  * @this {HTMLInputElement}
  */
-function onFileUpload() {
+async function onFileUpload() {
 	const { files } = this;
 	if (!files) {
 		return;
@@ -33,6 +39,59 @@ function onFileUpload() {
 		tarWriter.addFile(file.name, file);
 		fileList.appendChild(document.createElement('li')).textContent = file.name;
 	}
+
+	const tarball = await tarWriter.write();
+
+	const fileReader1 = new FileReader();
+	fileReader1.readAsDataURL(tarball);
+
+	fileReader1.onloadend = () => {
+		const result = fileReader1.result;
+		if (typeof result !== 'string') {
+			throw new Error(
+				`Unexpected type of result: ${Object.prototype.toString.call(result)}`,
+			);
+		}
+		console.log(result.length);
+	};
+
+	const compressedReadableStream = tarball
+		.stream()
+		.pipeThrough(new CompressionStream('gzip'));
+
+	const blob = await new Response(compressedReadableStream).blob();
+
+	const fileReader = new FileReader();
+	fileReader.readAsDataURL(blob);
+
+	fileReader.onloadend = () => {
+		const result = fileReader.result;
+		if (typeof result !== 'string') {
+			throw new Error(
+				`Unexpected type of result: ${Object.prototype.toString.call(result)}`,
+			);
+		}
+		// Prefix that the data URL has and we want to remove
+		const resultStart = 'data:application/octet-stream;base64,';
+
+		const link = [
+			location.origin,
+			location.pathname,
+			location.search,
+			'#',
+			result.slice(resultStart.length),
+		].join('');
+		linkEl.href = link;
+	};
 }
+
+function copyLink() {
+	navigator.clipboard.writeText(linkEl.href);
+}
+
+assertNotNil(document.getElementById('copy-link')).addEventListener(
+	'click',
+	copyLink,
+);
 
 fileInput.addEventListener('change', onFileUpload);
