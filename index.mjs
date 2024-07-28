@@ -71,15 +71,17 @@ async function onFileUpload() {
 				`Unexpected type of result: ${Object.prototype.toString.call(result)}`,
 			);
 		}
-		// Prefix that the data URL has and we want to remove
-		const resultStart = 'data:application/octet-stream;base64,';
 
 		const link = [
 			location.origin,
 			location.pathname,
 			location.search,
 			'#',
-			result.slice(resultStart.length),
+			result.slice(
+				// There's a prefix like "data:application/octet-stream;base64," in the data,
+				// which we don't need
+				result.indexOf(',') + 1,
+			),
 		].join('');
 		linkEl.href = link;
 	};
