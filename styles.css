@@ -14,4 +14,18 @@ body {
 	text-align: center;
 	font-family: Calibri, Verdana, sans-serif;
 	color: light-dark(var(--light-color) var(--dark-color));
+
+	display: grid;
+}
+
+header {
+	grid-area: header;
+}
+
+body[data-page='file-browser'] {
+	grid-template-columns: 1fr 5fr;
+	grid-template-rows: auto;
+	grid-template-areas:
+		'header header'
+		'files preview';
 }

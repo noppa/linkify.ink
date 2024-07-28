@@ -1,3 +1,6 @@
+// This serves as a very simple development server that serves the files in the
+// current directory and polls for updates to the files, reloading the page on code changes.
+
 import * as http from 'node:http';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -30,7 +33,7 @@ function getContentType(extname) {
 		case 'jpg':
 			return 'image/' + extnameWithoutDot;
 		default:
-			throw new Error(`No handler for extension: ${extnameWithoutDot}`);
+			return 'text/plain';
 	}
 }
 
@@ -91,6 +94,9 @@ http
 							return stats.mtime.valueOf();
 						} catch (error) {
 							console.error(error);
+							if (error.code === 'ENOENT') {
+								requestedRelativePaths.delete(relativePath);
+							}
 						}
 					}),
 				);
@@ -129,8 +135,6 @@ http
 			response.writeHead(200, { ...baseHeaders, 'Content-Type': contentType });
 			response.end(content, 'utf-8');
 		} catch (error) {
-			console.error(error);
-
 			if (error.code === 'ENOENT') {
 				try {
 					const indexHtmlContents = await getIndexHtml();
@@ -146,6 +150,7 @@ http
 				}
 			}
 
+			console.error(error);
 			response.writeHead(500);
 			response.end('Internal server error');
 		}

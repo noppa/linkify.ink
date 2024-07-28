@@ -10,12 +10,9 @@
 			<a class="logo" href="#"><h1>linkify.ink</h1></a>
 			<p>Embed and send files to your friends with a link.</p>
 		</header>
-		<main>
-			<div>
-				<input type="file" id="file" multiple />
-				<label for="file" id="file-label">Choose a file</label>
-			</div>
+		<main id="app-main"></main>
 
+		<template id="file-browser-page-template">
 			<section>
 				<h2>Files</h2>
 
@@ -30,7 +27,18 @@
 					<button type="button" id="copy-link">Copy</button>
 				</div>
 			</section>
-		</main>
+		</template>
+
+		<template id="file-receiver-page-template"> </template>
+
+		<template id="file-list-new-file-template">
+			<li class="row">
+				<button type="button">Add file</button>
+			</li>
+			<li class="row">
+				<button type="button">Add folder</button>
+			</li>
+		</template>
 
 		<script type="module" src="index.mjs"></script>
 	</body>
