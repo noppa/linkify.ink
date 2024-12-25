@@ -1,20 +1,5 @@
 import { TarWriter } from './vendors/tarjs/tarjs.mjs';
-
-/**
- * @template T
- * @param {T} value
- * @param {string} message
- * @returns {NonNullable<T>}
- */
-function assertNotNil(
-	value,
-	message = 'Expected value not to be null or undefined',
-) {
-	if (value == null) {
-		throw new Error(message);
-	}
-	return value;
-}
+import { assertNotNil } from './src/utils.mjs';
 
 export function initFileBrowserPage() {
 	document.body.dataset.page = 'file-browser';

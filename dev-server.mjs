@@ -4,6 +4,7 @@
 import * as http from 'node:http';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { assertNotNil } from './src/utils.mjs';
 
 /* globals process */
 
@@ -63,7 +64,7 @@ setTimeout(checkUpdates, ${updateInterval});
 http
 	.createServer(async function (request, response) {
 		try {
-			const filePath = request.url;
+			const filePath = assertNotNil(request.url);
 			const relativePathStart =
 				filePath.length <= 1
 					? // Normalize "/" to "", and later to "index.html"
@@ -94,16 +95,18 @@ http
 							return stats.mtime.valueOf();
 						} catch (error) {
 							console.error(error);
-							if (error.code === 'ENOENT') {
+							if (error?.code === 'ENOENT') {
 								requestedRelativePaths.delete(relativePath);
 							}
 						}
 					}),
 				);
 
-				const newUpdatedAt = stats
-					.filter(Boolean)
-					.reduce((acc, mtime) => Math.max(acc, mtime), 0);
+				const newUpdatedAt =
+					stats
+						.filter(Boolean)
+						.reduce((acc, mtime) => Math.max(acc || 0, mtime || 0), 0) || 0;
+
 				const hasUpdates = newUpdatedAt > lastUpdatedAt;
 
 				if (hasUpdates) {
@@ -124,6 +127,7 @@ http
 
 			const contentType = getContentType(path.extname(relativePath));
 
+			console.log('Path', import.meta.dirname);
 			const content =
 				relativePath === 'index.html'
 					? await getIndexHtml()
