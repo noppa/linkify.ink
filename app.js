@@ -17,6 +17,14 @@ function App() {
 		return () => window.removeEventListener('popstate', onPop);
 	}, []);
 
+	// If on root with a hash payload, redirect to /receive
+	useEffect(() => {
+		if (route === '/' && window.location.hash.length > 1) {
+			window.history.replaceState(null, '', '/receive' + window.location.hash);
+			setRoute('/receive');
+		}
+	}, []);
+
 	if (route === '/receive') return html`<${ReceivePage} />`;
 	if (route === '/about') return html`<${AboutPage} />`;
 	return html`<${EditorPage} />`;

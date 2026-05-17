@@ -3,6 +3,7 @@ import { h, Fragment } from '../libraries.bundle.js';
 import { useState, useEffect } from '../libraries.bundle.js';
 import { htm } from '../libraries.bundle.js';
 import { decode } from '../lib/codec.js';
+import { decode as b64decode } from '../lib/base64url.js';
 
 const html = htm.bind(h);
 
@@ -21,14 +22,6 @@ export default function ReceivePage() {
 		if (!hash) return;
 		// Peek at flag byte to detect encryption type
 		try {
-			const { decode: b64decode } = /** @type {any} */ ({ decode: (s) => {
-				const base64 = s.replace(/-/g, '+').replace(/_/g, '/');
-				const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
-				const binary = atob(padded);
-				const buf = new Uint8Array(binary.length);
-				for (let i = 0; i < binary.length; i++) buf[i] = binary.charCodeAt(i);
-				return buf;
-			}});
 			const raw = hash.startsWith('#') ? hash.slice(1) : hash;
 			const buf = b64decode(raw);
 			const encType = (buf[0] >> 6) & 0x03;
