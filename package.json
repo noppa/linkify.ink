@@ -5,15 +5,23 @@
 	"main": "index.js",
 	"scripts": {
 		"start": "node dev-server.mjs",
-		"lint": "eslint && prettier --check .",
-		"lint:fix": "eslint --fix && prettier --write .",
+		"bundle-libs": "esbuild libraries.js --bundle --format=esm --outfile=libraries.bundle.js --loader:.wasm=dataurl --external:fs --external:path",
+		"typecheck": "tsgo --noEmit",
+		"lint": "oxlint .",
 		"test": "echo \"Error: no test specified\" && exit 1"
 	},
 	"keywords": [],
 	"author": "",
 	"license": "ISC",
 	"devDependencies": {
+		"@bokuweb/zstd-wasm": "^0.0.27",
 		"@typescript/native-preview": "^7.0.0-dev.20251228.1",
-		"oxlint": "^1.35.0"
+		"argon2-browser": "^1.18.0",
+		"esbuild": "^0.28.0",
+		"htm": "^3.1.1",
+		"marked": "^18.0.3",
+		"oxlint": "^1.35.0",
+		"preact": "^10.29.2",
+		"zstd-wasm": "^0.0.9"
 	}
 }

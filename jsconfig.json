@@ -1,9 +1,14 @@
 {
 	"compilerOptions": {
+		"allowJs": true,
 		"checkJs": true,
+		"noEmit": true,
 		"strict": true,
-		"target": "ES2023"
+		"target": "ESNext",
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+		"lib": ["ESNext", "DOM"]
 	},
-	"include": ["index.mjs", "dev-server.mjs"],
-	"exclude": ["vendors/tarjs/tarjs.mjs"]
+	"include": ["**/*.js", "**/*.mjs"],
+	"exclude": ["libraries.bundle.js", "node_modules", "vendors"]
 }
