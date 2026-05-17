@@ -1,46 +1,17 @@
 <!doctype html>
-<html>
+<html lang="en">
 	<head>
 		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 		<title>linkify.ink</title>
-		<link rel="stylesheet" type="text/css" href="styles.css" />
+		<link rel="stylesheet" href="styles.css" />
+		<link
+			rel="stylesheet"
+			href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3/tabler-icons.min.css"
+		/>
 	</head>
 	<body>
-		<header>
-			<a class="logo" href="#"><h1>linkify.ink</h1></a>
-			<p>Embed and send files to your friends with a link.</p>
-		</header>
-		<main id="app-main"></main>
-
-		<template id="file-browser-page-template">
-			<section>
-				<h2>Files</h2>
-
-				<ul id="file-list"></ul>
-				<input type="file" id="file-input" multiple="" />
-			</section>
-
-			<section>
-				<h2>Share</h2>
-
-				<div class="row">
-					<a id="link">Link to your content</a>
-					<button type="button" id="copy-link">Copy</button>
-				</div>
-			</section>
-		</template>
-
-		<template id="file-receiver-page-template"> </template>
-
-		<template id="file-list-new-file-template">
-			<li class="row">
-				<button type="button">Add file</button>
-			</li>
-			<li class="row">
-				<button type="button">Add folder</button>
-			</li>
-		</template>
-
-		<script type="module" src="index.mjs"></script>
+		<div id="app"></div>
+		<script type="module" src="app.js"></script>
 	</body>
 </html>

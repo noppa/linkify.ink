@@ -1,0 +1,40 @@
+<!doctype html>
+<html>
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>sandbox</title>
+		<style>
+			body { margin: 0; }
+		</style>
+	</head>
+	<body>
+		<script>
+			// Listen for file system messages from the parent (linkify.ink)
+			// Message format: { type: 'files', files: { [name]: number[] } }
+			window.addEventListener('message', function (event) {
+				// Strict origin check — only accept from the main app origin
+				const allowedOrigin = 'https://linkify.ink';
+				if (event.origin !== allowedOrigin) return;
+
+				if (!event.data || event.data.type !== 'files') return;
+
+				const files = event.data.files;
+				if (!files) return;
+
+				// Register a service worker that intercepts fetch requests
+				// and serves files from the in-memory map.
+				if ('serviceWorker' in navigator) {
+					navigator.serviceWorker.register('/sandbox-sw.js').then(function (reg) {
+						navigator.serviceWorker.ready.then(function () {
+							navigator.serviceWorker.controller?.postMessage({
+								type: 'files',
+								files: files,
+							});
+						});
+					});
+				}
+			});
+		</script>
+	</body>
+</html>
