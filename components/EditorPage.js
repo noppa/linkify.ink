@@ -86,6 +86,10 @@ export default function EditorPage() {
 		setFiles((prev) => prev.map((f, i) => i === index ? { ...f, content } : f));
 	}
 
+	function replaceFile(index, newFile) {
+		setFiles((prev) => prev.map((f, i) => i === index ? newFile : f));
+	}
+
 	function addFiles(newFiles) {
 		setFiles((prev) => {
 			const existing = new Set(prev.map((f) => f.name));
@@ -137,6 +141,7 @@ export default function EditorPage() {
 					<${Editor}
 						file=${activeFile}
 						onChange=${(content) => updateFile(activeIndex, content)}
+						onReplace=${(newFile) => replaceFile(activeIndex, newFile)}
 					/>
 					<div
 						class="divider-handle"

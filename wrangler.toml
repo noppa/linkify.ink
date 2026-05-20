@@ -1,0 +1,7 @@
+name = "linkify-sandbox"
+main = "sandbox-worker.js"
+compatibility_date = "2025-01-01"
+
+[[routes]]
+pattern = "*.sandbox.linkify.ink/*"
+zone_name = "linkify.ink"

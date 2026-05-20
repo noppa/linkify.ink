@@ -1,0 +1,53 @@
+// @ts-check
+// Service worker for *.sandbox.linkify.ink — serves files from in-memory map
+
+/** @type {Map<string, Uint8Array>} */
+const files = new Map();
+
+self.addEventListener('install', () => {
+	// @ts-ignore
+	self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+	// @ts-ignore
+	event.waitUntil(self.clients.claim());
+});
+
+self.addEventListener('message', (event) => {
+	if (!event.data || event.data.type !== 'files') return;
+	files.clear();
+	for (const [name, bytes] of Object.entries(event.data.files)) {
+		const normalized = '/' + String(name).replace(/^\//, '');
+		files.set(normalized, new Uint8Array(/** @type {any} */ (bytes)));
+	}
+	// @ts-ignore
+	event.source?.postMessage({ type: 'ready' });
+});
+
+self.addEventListener('fetch', (event) => {
+	const { pathname } = new URL(/** @type {FetchEvent} */ (event).request.url);
+	const path = pathname === '/' ? '/index.html' : pathname;
+	const data = files.get(path);
+	if (data !== undefined) {
+		/** @type {FetchEvent} */ (event).respondWith(
+			new Response(data, { headers: { 'Content-Type': mimeFor(path) } }),
+		);
+	}
+	// Unknown path — fall through (network will 404; SW handled what it knows)
+});
+
+/** @param {string} path */
+function mimeFor(path) {
+	const ext = path.split('.').pop()?.toLowerCase() ?? '';
+	/** @type {Record<string, string>} */
+	const map = {
+		html: 'text/html', htm: 'text/html', css: 'text/css',
+		js: 'text/javascript', mjs: 'text/javascript',
+		json: 'application/json', md: 'text/markdown', txt: 'text/plain',
+		svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg',
+		jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif',
+		woff: 'font/woff', woff2: 'font/woff2', ico: 'image/x-icon',
+	};
+	return map[ext] ?? 'application/octet-stream';
+}

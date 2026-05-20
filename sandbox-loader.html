@@ -5,36 +5,49 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 		<title>sandbox</title>
 		<style>
-			body { margin: 0; }
+			body { margin: 0; background: #fff; }
 		</style>
 	</head>
 	<body>
 		<script>
-			// Listen for file system messages from the parent (linkify.ink)
-			// Message format: { type: 'files', files: { [name]: number[] } }
-			window.addEventListener('message', function (event) {
-				// Strict origin check — only accept from the main app origin
-				const allowedOrigin = 'https://linkify.ink';
-				if (event.origin !== allowedOrigin) return;
+			const PARENT_ORIGIN = 'https://linkify.ink';
+			let pendingEntry = 'index.html';
 
+			async function init() {
+				if (!('serviceWorker' in navigator)) return;
+
+				await navigator.serviceWorker.register('/sandbox-sw.js', { scope: '/' });
+
+				// Wait until this page is controlled by the SW (may need skipWaiting + claim)
+				await new Promise((resolve) => {
+					if (navigator.serviceWorker.controller) { resolve(undefined); return; }
+					navigator.serviceWorker.addEventListener('controllerchange', () => resolve(undefined), { once: true });
+				});
+
+				// SW sends 'ready' after storing files → navigate to entry
+				navigator.serviceWorker.addEventListener('message', (event) => {
+					if (event.data?.type === 'ready') {
+						window.location.replace('/' + pendingEntry);
+					}
+				});
+
+				// Tell parent we're ready to receive the file payload
+				window.parent.postMessage({ type: 'sandbox-ready' }, PARENT_ORIGIN);
+			}
+
+			// Receive files from the parent (linkify.ink editor)
+			window.addEventListener('message', (event) => {
+				if (event.origin !== PARENT_ORIGIN) return;
 				if (!event.data || event.data.type !== 'files') return;
-
-				const files = event.data.files;
-				if (!files) return;
-
-				// Register a service worker that intercepts fetch requests
-				// and serves files from the in-memory map.
-				if ('serviceWorker' in navigator) {
-					navigator.serviceWorker.register('/sandbox-sw.js').then(function (reg) {
-						navigator.serviceWorker.ready.then(function () {
-							navigator.serviceWorker.controller?.postMessage({
-								type: 'files',
-								files: files,
-							});
-						});
-					});
-				}
+				pendingEntry = event.data.entry || 'index.html';
+				// Forward the file map to the SW for fetch interception
+				navigator.serviceWorker.controller?.postMessage({
+					type: 'files',
+					files: event.data.files,
+				});
 			});
+
+			init();
 		</script>
 	</body>
 </html>

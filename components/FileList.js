@@ -57,7 +57,7 @@ export default function FileList({ files, activeIndex, onSelect, onAdd, onDelete
 	return html`
 		<aside class="sidebar ${collapsed ? 'collapsed' : ''}">
 			<div class="sidebar-header">
-				Files
+				<span class="sidebar-title">Files</span>
 				<button class="btn btn-icon" aria-label="Toggle sidebar" onClick=${onToggleCollapse}>
 					<i class="ti ${collapsed ? 'ti-layout-sidebar-left-expand' : 'ti-layout-sidebar-left-collapse'}"></i>
 				</button>

@@ -3,6 +3,8 @@ import { h, Fragment } from '../libraries.bundle.js';
 import { useState } from '../libraries.bundle.js';
 import { htm } from '../libraries.bundle.js';
 import { encode } from '../lib/codec.js';
+import { decode as b64decode } from '../lib/base64url.js';
+import { importPublicKey } from '../lib/crypto.js';
 
 const html = htm.bind(h);
 
@@ -17,6 +19,7 @@ const html = htm.bind(h);
 export default function ShareModal({ files, onClose }) {
 	const [encryption, setEncryption] = useState(/** @type {'none' | 'password' | 'ecdh'} */ ('none'));
 	const [password, setPassword] = useState('');
+	const [recipientKey, setRecipientKey] = useState('');
 	const [url, setUrl] = useState('');
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState('');
@@ -27,10 +30,22 @@ export default function ShareModal({ files, onClose }) {
 		setError('');
 		setUrl('');
 		try {
-			const result = await encode(files, {
-				encryption,
-				...(encryption === 'password' ? { password } : {}),
-			});
+			/** @type {Parameters<typeof encode>[1]} */
+			const opts = { encryption };
+			if (encryption === 'password') {
+				if (!password) throw new Error('Enter a password');
+				opts.password = password;
+			} else if (encryption === 'ecdh') {
+				if (!recipientKey.trim()) throw new Error('Paste the recipient\'s public key');
+				const raw = b64decode(recipientKey.trim());
+				// Validate key by importing it
+				await importPublicKey(raw);
+				opts.recipientPublicKey = raw;
+			}
+			const result = await encode(
+				files.map((f) => ({ name: f.name, data: f.content })),
+				opts,
+			);
 			setUrl(result);
 		} catch (e) {
 			setError(e instanceof Error ? e.message : String(e));
@@ -53,6 +68,9 @@ export default function ShareModal({ files, onClose }) {
 		if (e.target === e.currentTarget) onClose();
 	}
 
+	const urlLen = url.length;
+	const urlWarning = urlLen > 32000 ? `Warning: URL is ${urlLen.toLocaleString()} chars — some browsers may truncate it.` : '';
+
 	return html`
 		<div class="modal-backdrop" onClick=${handleBackdropClick}>
 			<div class="modal">
@@ -62,9 +80,10 @@ export default function ShareModal({ files, onClose }) {
 
 				<div class="modal-row">
 					<label>Encryption</label>
-					<select value=${encryption} onChange=${(e) => setEncryption(e.target.value)}>
+					<select value=${encryption} onChange=${(e) => { setEncryption(e.target.value); setUrl(''); setError(''); }}>
 						<option value="none">None (public link)</option>
 						<option value="password">Password (Argon2id + AES-GCM)</option>
+						<option value="ecdh">Recipient public key (ECDH)</option>
 					</select>
 				</div>
 
@@ -80,21 +99,35 @@ export default function ShareModal({ files, onClose }) {
 					</div>
 				`}
 
-				${error && html`<div class="modal-row" style="color: tomato">${error}</div>`}
+				${encryption === 'ecdh' && html`
+					<div class="modal-row">
+						<label>Recipient's public key</label>
+						<textarea
+							class="modal-textarea"
+							value=${recipientKey}
+							onInput=${(e) => setRecipientKey(e.target.value)}
+							placeholder="Paste the base64url public key from the /receive page"
+							rows="3"
+						></textarea>
+					</div>
+				`}
+
+				${error && html`<div class="modal-row modal-error">${error}</div>`}
 
 				${url && html`
 					<div class="modal-row">
-						<label>Your link</label>
+						<label>Your link ${urlLen > 0 ? html`<span class="modal-url-length">${urlLen.toLocaleString()} chars</span>` : ''}</label>
 						<div class="modal-url">${url}</div>
+						${urlWarning && html`<div class="modal-error">${urlWarning}</div>`}
 					</div>
 				`}
 
 				<div class="modal-actions">
 					<button class="btn" onClick=${onClose}>Cancel</button>
-					${url && html`
+					${url && html`<${Fragment}>
 						<button class="btn" onClick=${openUrl}>Open <i class="ti ti-external-link"></i></button>
 						<button class="btn" onClick=${copyUrl}>${copied ? 'Copied!' : 'Copy link'}</button>
-					`}
+					</${Fragment}>`}
 					<button class="btn btn-primary" onClick=${generate} disabled=${loading}>
 						${loading ? 'Generating…' : 'Generate link'}
 					</button>

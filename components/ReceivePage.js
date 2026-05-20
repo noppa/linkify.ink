@@ -3,7 +3,8 @@ import { h, Fragment } from '../libraries.bundle.js';
 import { useState, useEffect } from '../libraries.bundle.js';
 import { htm } from '../libraries.bundle.js';
 import { decode } from '../lib/codec.js';
-import { decode as b64decode } from '../lib/base64url.js';
+import { decode as b64decode, encode as b64encode } from '../lib/base64url.js';
+import { generateEcdhKeypair, exportPublicKey } from '../lib/crypto.js';
 
 const html = htm.bind(h);
 
@@ -11,36 +12,57 @@ const html = htm.bind(h);
 
 export default function ReceivePage() {
 	const hash = window.location.hash;
+
 	const [password, setPassword] = useState('');
 	const [files, setFiles] = useState(/** @type {FileEntry[] | null} */ (null));
 	const [error, setError] = useState('');
 	const [loading, setLoading] = useState(false);
 	const [needsPassword, setNeedsPassword] = useState(false);
+	const [isEcdh, setIsEcdh] = useState(false);
 
-	// Try auto-decode on load if no password needed
+	// Ephemeral ECDH keypair for this session
+	const [ecdhPublicKey, setEcdhPublicKey] = useState('');
+	const [ecdhPrivateKey, setEcdhPrivateKey] = useState(/** @type {CryptoKey | null} */ (null));
+	const [keyCopied, setKeyCopied] = useState(false);
+
+	// Generate ephemeral ECDH keypair on mount (for the /receive → sender flow)
+	useEffect(() => {
+		generateEcdhKeypair().then(async ({ publicKey, privateKey }) => {
+			const raw = await exportPublicKey(publicKey);
+			setEcdhPublicKey(b64encode(raw));
+			setEcdhPrivateKey(privateKey);
+		}).catch(() => { /* ignore — ECDH simply won't be offered */ });
+	}, []);
+
+	// Auto-decode on load if no password/key needed
 	useEffect(() => {
 		if (!hash) return;
-		// Peek at flag byte to detect encryption type
 		try {
 			const raw = hash.startsWith('#') ? hash.slice(1) : hash;
 			const buf = b64decode(raw);
 			const encType = (buf[0] >> 6) & 0x03;
 			if (encType === 0) {
-				// Unencrypted, decode immediately
 				handleDecode();
-			} else {
-				setNeedsPassword(encType === 1);
+			} else if (encType === 1) {
+				setNeedsPassword(true);
+			} else if (encType === 2) {
+				setIsEcdh(true);
 			}
-		} catch {
-			// ignore
-		}
+		} catch { /* ignore */ }
 	}, []);
 
 	async function handleDecode() {
 		setLoading(true);
 		setError('');
 		try {
-			const result = await decode(hash, { password: password || undefined });
+			/** @type {{ password?: string, privateKey?: CryptoKey }} */
+			const opts = {};
+			if (needsPassword) opts.password = password;
+			if (isEcdh) {
+				if (!ecdhPrivateKey) throw new Error('ECDH private key not ready — please wait a moment and try again');
+				opts.privateKey = ecdhPrivateKey;
+			}
+			const result = await decode(hash, opts);
 			const typedFiles = result.files.map((f) => ({
 				name: f.name,
 				type: guessType(f.name),
@@ -56,7 +78,6 @@ export default function ReceivePage() {
 
 	function openInEditor() {
 		if (!files) return;
-		// Encode as state in sessionStorage and navigate to editor
 		const serialized = JSON.stringify(
 			files.map((f) => ({ name: f.name, type: f.type, content: Array.from(f.content) })),
 		);
@@ -76,18 +97,41 @@ export default function ReceivePage() {
 		}
 	}
 
+	async function copyKey() {
+		await navigator.clipboard.writeText(ecdhPublicKey);
+		setKeyCopied(true);
+		setTimeout(() => setKeyCopied(false), 1500);
+	}
+
 	return html`
 		<div class="receive-page">
-			<div class="logo" style="font-size:18px;font-weight:700">
+			<a class="logo receive-logo" href="/">
 				<div class="logo-dot"></div>
 				linkify.ink
-			</div>
+			</a>
 
 			${!files && html`
 				<div class="receive-card">
-					<div style="font-weight:600">Receive files</div>
-					${!hash && html`<p style="color:var(--text-muted)">No payload in URL.</p>`}
+					${!hash && html`<>
+						<div class="receive-section-title">Your receive session</div>
+						<p class="receive-hint">
+							Share this public key with the sender. They will use it to encrypt files for you.
+							<strong>Do not reload this tab</strong> — your private key lives only in memory.
+						</p>
+						${ecdhPublicKey
+							? html`
+								<div class="receive-pubkey">${ecdhPublicKey}</div>
+								<button class="btn" onClick=${copyKey}>
+									${keyCopied ? 'Copied!' : 'Copy public key'}
+								</button>
+							`
+							: html`<div class="receive-hint">Generating keypair…</div>`
+						}
+					</>`}
+
 					${hash && html`<>
+						<div class="receive-section-title">Receive files</div>
+
 						${needsPassword && html`
 							<div class="modal-row">
 								<label>Password</label>
@@ -100,9 +144,18 @@ export default function ReceivePage() {
 								/>
 							</div>
 						`}
-						${error && html`<div style="color:tomato">${error}</div>`}
-						<div class="modal-actions">
-							<button class="btn btn-primary" onClick=${handleDecode} disabled=${loading}>
+
+						${isEcdh && html`
+							<p class="receive-hint">
+								This payload was encrypted with your public key.
+								Click decrypt to open it using your session's private key.
+							</p>
+						`}
+
+						${error && html`<div class="modal-error">${error}</div>`}
+
+						<div class="modal-actions" style="justify-content:flex-start">
+							<button class="btn btn-primary" onClick=${handleDecode} disabled=${loading || (isEcdh && !ecdhPrivateKey)}>
 								${loading ? 'Decrypting…' : 'Decrypt & Open'}
 							</button>
 						</div>
@@ -112,16 +165,17 @@ export default function ReceivePage() {
 
 			${files && html`
 				<div class="receive-card">
-					<div style="font-weight:600">${files.length} file${files.length !== 1 ? 's' : ''} received</div>
-					<ul style="list-style:none;display:flex;flex-direction:column;gap:4px">
+					<div class="receive-section-title">${files.length} file${files.length !== 1 ? 's' : ''} received</div>
+					<ul class="receive-file-list">
 						${files.map((f) => html`
-							<li style="display:flex;align-items:center;gap:6px;font-size:12px">
-								<i class="ti ti-file"></i> ${f.name}
-								<span style="color:var(--text-muted);margin-left:auto">${humanSize(f.content.length)}</span>
+							<li>
+								<i class="ti ti-file"></i>
+								<span>${f.name}</span>
+								<span class="receive-file-size">${humanSize(f.content.length)}</span>
 							</li>
 						`)}
 					</ul>
-					<div class="modal-actions">
+					<div class="modal-actions" style="justify-content:flex-start">
 						<button class="btn" onClick=${downloadAll}>
 							<i class="ti ti-download"></i> Download all
 						</button>
@@ -138,13 +192,13 @@ export default function ReceivePage() {
 /** @param {string} name */
 function guessType(name) {
 	const ext = name.split('.').pop()?.toLowerCase() ?? '';
+	/** @type {Record<string, string>} */
 	const map = {
 		html: 'text/html', htm: 'text/html', css: 'text/css',
 		js: 'text/javascript', mjs: 'text/javascript', ts: 'text/typescript',
 		json: 'application/json', md: 'text/markdown', txt: 'text/plain',
 		svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg',
-		jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp',
-		avif: 'image/avif',
+		jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif',
 	};
 	return map[ext] || 'application/octet-stream';
 }
