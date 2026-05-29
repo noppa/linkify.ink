@@ -60,6 +60,7 @@ export default function EditorPage() {
 	const dividerRef = useRef(/** @type {HTMLDivElement | null} */ (null));
 	const rightRef = useRef(/** @type {HTMLDivElement | null} */ (null));
 	const dragging = useRef(false);
+	const dirty = useRef(false);
 
 	// Decode files from URL hash on first load
 	useEffect(() => {
@@ -86,10 +87,10 @@ export default function EditorPage() {
 		return () => window.removeEventListener('keydown', onKey);
 	}, []);
 
-	// beforeunload warning
+	// beforeunload warning — only if the user has made changes
 	useEffect(() => {
 		function onUnload(e) {
-			e.preventDefault();
+			if (dirty.current) e.preventDefault();
 		}
 		window.addEventListener('beforeunload', onUnload);
 		return () => window.removeEventListener('beforeunload', onUnload);
@@ -122,16 +123,19 @@ export default function EditorPage() {
 	}
 
 	function updateFile(index, content) {
+		dirty.current = true;
 		setFiles((prev) =>
 			prev.map((f, i) => (i === index ? { ...f, content } : f)),
 		);
 	}
 
 	function replaceFile(index, newFile) {
+		dirty.current = true;
 		setFiles((prev) => prev.map((f, i) => (i === index ? newFile : f)));
 	}
 
 	function addFiles(newFiles) {
+		dirty.current = true;
 		setFiles((prev) => {
 			const existing = new Set(prev.map((f) => f.name));
 			const toAdd = newFiles.filter((f) => !existing.has(f.name));
@@ -144,12 +148,14 @@ export default function EditorPage() {
 	}
 
 	function renameFile(index, newName) {
+		dirty.current = true;
 		setFiles((prev) =>
 			prev.map((f, i) => (i === index ? { ...f, name: newName, type: guessType(newName) } : f)),
 		);
 	}
 
 	function deleteFile(index) {
+		dirty.current = true;
 		setFiles((prev) => {
 			const next = prev.filter((_, i) => i !== index);
 			if (activeIndex >= next.length)
