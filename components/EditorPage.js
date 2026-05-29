@@ -7,10 +7,25 @@ import Editor from './Editor.js';
 import Preview from './Preview.js';
 import ShareModal from './ShareModal.js';
 import Icon from '../lib/icons.js';
+import { decode } from '../lib/codec.js';
 
 const html = htm.bind(h);
 
 /** @typedef {{ name: string, type: string, content: Uint8Array }} FileEntry */
+
+/** @param {string} name */
+function guessType(name) {
+	const ext = name.split('.').pop()?.toLowerCase() ?? '';
+	/** @type {Record<string, string>} */
+	const map = {
+		html: 'text/html', htm: 'text/html', css: 'text/css',
+		js: 'text/javascript', mjs: 'text/javascript', ts: 'text/typescript',
+		json: 'application/json', md: 'text/markdown', txt: 'text/plain',
+		svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg',
+		jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif',
+	};
+	return map[ext] || 'application/octet-stream';
+}
 
 const DEFAULT_FILES = [
 	{
@@ -23,7 +38,9 @@ const DEFAULT_FILES = [
 	{
 		name: 'style.css',
 		type: 'text/css',
-		content: new TextEncoder().encode(`body {\n  font-family: sans-serif;\n  margin: 40px;\n}\n`),
+		content: new TextEncoder().encode(
+			`body {\n  font-family: sans-serif;\n  margin: 40px;\n}\n`,
+		),
 	},
 	{
 		name: 'script.js',
@@ -37,11 +54,25 @@ export default function EditorPage() {
 	const [activeIndex, setActiveIndex] = useState(0);
 	const [showShare, setShowShare] = useState(false);
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+	const [hashError, setHashError] = useState('');
 
 	// Drag handle state
 	const dividerRef = useRef(/** @type {HTMLDivElement | null} */ (null));
 	const rightRef = useRef(/** @type {HTMLDivElement | null} */ (null));
 	const dragging = useRef(false);
+
+	// Decode files from URL hash on first load
+	useEffect(() => {
+		const hash = window.location.hash;
+		if (!hash || hash.length <= 1) return;
+		window.history.replaceState(null, '', window.location.pathname);
+		decode(hash)
+			.then(({ files: decoded }) => {
+				setFiles(decoded.map((f) => ({ name: f.name, type: guessType(f.name), content: f.data })));
+				setActiveIndex(0);
+			})
+			.catch((e) => setHashError(e instanceof Error ? e.message : String(e)));
+	}, []);
 
 	// Keyboard shortcut Cmd/Ctrl+Shift+S → share
 	useEffect(() => {
@@ -69,10 +100,15 @@ export default function EditorPage() {
 		function onMouseMove(e) {
 			if (!dragging.current || !rightRef.current) return;
 			const rect = rightRef.current.getBoundingClientRect();
-			const fraction = Math.max(0.1, Math.min(0.9, (e.clientY - rect.top) / rect.height));
+			const fraction = Math.max(
+				0.1,
+				Math.min(0.9, (e.clientY - rect.top) / rect.height),
+			);
 			rightRef.current.style.gridTemplateRows = `${fraction}fr 4px ${1 - fraction}fr`;
 		}
-		function onMouseUp() { dragging.current = false; }
+		function onMouseUp() {
+			dragging.current = false;
+		}
 		window.addEventListener('mousemove', onMouseMove);
 		window.addEventListener('mouseup', onMouseUp);
 		return () => {
@@ -81,14 +117,18 @@ export default function EditorPage() {
 		};
 	}, []);
 
-	function startDrag() { dragging.current = true; }
+	function startDrag() {
+		dragging.current = true;
+	}
 
 	function updateFile(index, content) {
-		setFiles((prev) => prev.map((f, i) => i === index ? { ...f, content } : f));
+		setFiles((prev) =>
+			prev.map((f, i) => (i === index ? { ...f, content } : f)),
+		);
 	}
 
 	function replaceFile(index, newFile) {
-		setFiles((prev) => prev.map((f, i) => i === index ? newFile : f));
+		setFiles((prev) => prev.map((f, i) => (i === index ? newFile : f)));
 	}
 
 	function addFiles(newFiles) {
@@ -104,23 +144,16 @@ export default function EditorPage() {
 	}
 
 	function renameFile(index, newName) {
-		const ext = newName.split('.').pop()?.toLowerCase() ?? '';
-		/** @type {Record<string, string>} */
-		const typeMap = {
-			html: 'text/html', htm: 'text/html', css: 'text/css',
-			js: 'text/javascript', mjs: 'text/javascript', ts: 'text/typescript',
-			json: 'application/json', md: 'text/markdown', txt: 'text/plain',
-			svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg',
-			jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif',
-		};
-		const type = typeMap[ext] || 'application/octet-stream';
-		setFiles((prev) => prev.map((f, i) => i === index ? { ...f, name: newName, type } : f));
+		setFiles((prev) =>
+			prev.map((f, i) => (i === index ? { ...f, name: newName, type: guessType(newName) } : f)),
+		);
 	}
 
 	function deleteFile(index) {
 		setFiles((prev) => {
 			const next = prev.filter((_, i) => i !== index);
-			if (activeIndex >= next.length) setActiveIndex(Math.max(0, next.length - 1));
+			if (activeIndex >= next.length)
+				setActiveIndex(Math.max(0, next.length - 1));
 			return next;
 		});
 	}
@@ -140,6 +173,13 @@ export default function EditorPage() {
 					</button>
 				</div>
 			</div>
+
+			${hashError && html`
+				<div class="hash-error-bar">
+					<${Icon} name="info" /> Failed to open shared link: ${hashError}
+					<button class="hash-error-close" onClick=${() => setHashError('')}><${Icon} name="x" /></button>
+				</div>
+			`}
 
 			<div class="main ${sidebarCollapsed ? 'sidebar-collapsed' : ''}">
 				<${FileList}
@@ -166,18 +206,13 @@ export default function EditorPage() {
 						aria-orientation="horizontal"
 						onMouseDown=${startDrag}
 					></div>
-					<${Preview}
-						files=${files}
-						activeFile=${activeFile}
-					/>
+					<${Preview} files=${files} activeFile=${activeFile} />
 				</div>
 			</div>
 
-			${showShare && html`
-				<${ShareModal}
-					files=${files}
-					onClose=${() => setShowShare(false)}
-				/>
+			${showShare &&
+			html`
+				<${ShareModal} files=${files} onClose=${() => setShowShare(false)} />
 			`}
 		</div>
 	`;
@@ -192,6 +227,8 @@ function loadInitialFiles() {
 			const parsed = JSON.parse(stored);
 			return parsed.map((f) => ({ ...f, content: new Uint8Array(f.content) }));
 		}
-	} catch { /* ignore */ }
+	} catch {
+		/* ignore */
+	}
 	return DEFAULT_FILES;
 }
