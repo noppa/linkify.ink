@@ -72,7 +72,7 @@ export default function EditorPage() {
 				setFiles(decoded.map((f) => ({ name: f.name, type: guessType(f.name), content: f.data })));
 				setActiveIndex(0);
 			})
-			.catch((e) => setHashError(e instanceof Error ? e.message : String(e)));
+			.catch((e) => { console.error(e); setHashError(e instanceof Error ? e.message : String(e)); });
 	}, []);
 
 	// Keyboard shortcut Cmd/Ctrl+Shift+S → share

@@ -71,6 +71,7 @@ export default function ReceivePage() {
 			}));
 			setFiles(typedFiles);
 		} catch (e) {
+			console.error(e);
 			setError(e instanceof Error ? e.message : String(e));
 		} finally {
 			setLoading(false);
