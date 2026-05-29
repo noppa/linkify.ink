@@ -197,7 +197,7 @@ html, body {
 	white-space: nowrap;
 }
 
-.file-item-delete {
+.file-item-action {
 	opacity: 0;
 	background: none;
 	border: none;
@@ -207,13 +207,15 @@ html, body {
 	font-size: 12px;
 }
 
-.file-item:hover .file-item-delete {
+.file-item:hover .file-item-action {
 	opacity: 1;
 }
 
 .add-file {
 	padding: 6px 10px;
 	border-top: 1px solid var(--border);
+	display: flex;
+	gap: 4px;
 }
 
 .add-file-btn {
@@ -235,6 +237,19 @@ html, body {
 .add-file-btn:hover {
 	border-color: var(--accent);
 	color: var(--accent);
+}
+
+.file-item-rename-input {
+	flex: 1;
+	min-width: 0;
+	background: transparent;
+	border: none;
+	border-bottom: 1px solid var(--accent);
+	color: inherit;
+	font-family: inherit;
+	font-size: 12px;
+	padding: 0;
+	outline: none;
 }
 
 /* hidden file input */

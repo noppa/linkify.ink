@@ -103,6 +103,20 @@ export default function EditorPage() {
 		});
 	}
 
+	function renameFile(index, newName) {
+		const ext = newName.split('.').pop()?.toLowerCase() ?? '';
+		/** @type {Record<string, string>} */
+		const typeMap = {
+			html: 'text/html', htm: 'text/html', css: 'text/css',
+			js: 'text/javascript', mjs: 'text/javascript', ts: 'text/typescript',
+			json: 'application/json', md: 'text/markdown', txt: 'text/plain',
+			svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg',
+			jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif',
+		};
+		const type = typeMap[ext] || 'application/octet-stream';
+		setFiles((prev) => prev.map((f, i) => i === index ? { ...f, name: newName, type } : f));
+	}
+
 	function deleteFile(index) {
 		setFiles((prev) => {
 			const next = prev.filter((_, i) => i !== index);
@@ -134,6 +148,7 @@ export default function EditorPage() {
 					onSelect=${setActiveIndex}
 					onAdd=${addFiles}
 					onDelete=${deleteFile}
+					onRename=${renameFile}
 					collapsed=${sidebarCollapsed}
 					onToggleCollapse=${() => setSidebarCollapsed((v) => !v)}
 				/>
