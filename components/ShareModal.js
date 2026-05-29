@@ -2,6 +2,7 @@
 import { h, Fragment } from '../libraries.bundle.js';
 import { useState } from '../libraries.bundle.js';
 import { htm } from '../libraries.bundle.js';
+import Icon from '../lib/icons.js';
 import { encode } from '../lib/codec.js';
 import { decode as b64decode } from '../lib/base64url.js';
 import { importPublicKey } from '../lib/crypto.js';
@@ -75,7 +76,7 @@ export default function ShareModal({ files, onClose }) {
 		<div class="modal-backdrop" onClick=${handleBackdropClick}>
 			<div class="modal">
 				<div class="modal-title">
-					<i class="ti ti-link"></i> Share files
+					<${Icon} name="link" /> Share files
 				</div>
 
 				<div class="modal-row">
@@ -125,7 +126,7 @@ export default function ShareModal({ files, onClose }) {
 				<div class="modal-actions">
 					<button class="btn" onClick=${onClose}>Cancel</button>
 					${url && html`<${Fragment}>
-						<button class="btn" onClick=${openUrl}>Open <i class="ti ti-external-link"></i></button>
+						<button class="btn" onClick=${openUrl}>Open <${Icon} name="link-external" /></button>
 						<button class="btn" onClick=${copyUrl}>${copied ? 'Copied!' : 'Copy link'}</button>
 					</${Fragment}>`}
 					<button class="btn btn-primary" onClick=${generate} disabled=${loading}>

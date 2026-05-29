@@ -2,6 +2,7 @@
 import { h, Fragment } from '../libraries.bundle.js';
 import { useState, useEffect } from '../libraries.bundle.js';
 import { htm } from '../libraries.bundle.js';
+import Icon from '../lib/icons.js';
 import { decode } from '../lib/codec.js';
 import { decode as b64decode, encode as b64encode } from '../lib/base64url.js';
 import { generateEcdhKeypair, exportPublicKey } from '../lib/crypto.js';
@@ -169,7 +170,7 @@ export default function ReceivePage() {
 					<ul class="receive-file-list">
 						${files.map((f) => html`
 							<li>
-								<i class="ti ti-file"></i>
+								<${Icon} name="file" />
 								<span>${f.name}</span>
 								<span class="receive-file-size">${humanSize(f.content.length)}</span>
 							</li>
@@ -177,10 +178,10 @@ export default function ReceivePage() {
 					</ul>
 					<div class="modal-actions" style="justify-content:flex-start">
 						<button class="btn" onClick=${downloadAll}>
-							<i class="ti ti-download"></i> Download all
+							<${Icon} name="download" /> Download all
 						</button>
 						<button class="btn btn-primary" onClick=${openInEditor}>
-							<i class="ti ti-pencil"></i> Open in editor
+							<${Icon} name="pencil" /> Open in editor
 						</button>
 					</div>
 				</div>

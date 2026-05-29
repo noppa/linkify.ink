@@ -2,6 +2,7 @@
 import { h } from '../libraries.bundle.js';
 import { useState, useEffect } from '../libraries.bundle.js';
 import { htm } from '../libraries.bundle.js';
+import Icon from '../lib/icons.js';
 
 const html = htm.bind(h);
 
@@ -19,7 +20,7 @@ export default function Editor({ file, onChange, onReplace }) {
 		return html`
 			<div class="panel editor-panel">
 				<div class="panel-header">
-					<i class="ti ti-code"></i> editor
+					<${Icon} name="code" /> editor
 				</div>
 				<div class="editor-body editor-empty">
 					<p>Add a file to start editing.</p>
@@ -44,7 +45,7 @@ export default function Editor({ file, onChange, onReplace }) {
 	return html`
 		<div class="panel editor-panel">
 			<div class="panel-header">
-				<i class="ti ti-code"></i> ${file.name}
+				<${Icon} name="code" /> ${file.name}
 			</div>
 			<div class="editor-body">
 				${isText
@@ -102,7 +103,7 @@ function ImageViewer({ file, onReplace }) {
 	return html`
 		<div class="panel editor-panel">
 			<div class="panel-header">
-				<i class="ti ti-photo"></i> ${file.name}
+				<${Icon} name="image" /> ${file.name}
 			</div>
 			<div class="editor-image-viewer">
 				${blobUrl && html`<img src=${blobUrl} alt=${file.name} class="editor-image" />`}

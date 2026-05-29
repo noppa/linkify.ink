@@ -3,6 +3,7 @@ import { h } from '../libraries.bundle.js';
 import { useEffect, useRef } from '../libraries.bundle.js';
 import { htm } from '../libraries.bundle.js';
 import { marked } from '../libraries.bundle.js';
+import Icon from '../lib/icons.js';
 
 const html = htm.bind(h);
 
@@ -92,11 +93,11 @@ export default function Preview({ files, activeFile }) {
 	return html`
 		<div class="panel preview-panel">
 			<div class="panel-header">
-				<i class="ti ti-eye"></i> preview${activeFile ? ` — ${activeFile.name}` : ''}
+				<${Icon} name="eye" /> preview${activeFile ? ` — ${activeFile.name}` : ''}
 			</div>
 			${!isHosted && isHtml && html`
 				<div class="preview-notice">
-					<i class="ti ti-info-circle"></i>
+					<${Icon} name="info" />
 					Full HTML preview (with relative imports) requires the hosted version at linkify.ink.
 				</div>
 			`}

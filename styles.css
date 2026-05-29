@@ -4,6 +4,12 @@
 	padding: 0;
 }
 
+.icon {
+	display: inline-block;
+	vertical-align: -3px;
+	flex-shrink: 0;
+}
+
 :root {
 	color-scheme: light dark;
 	--bg: light-dark(#f8f8ff, #1e2a2a);

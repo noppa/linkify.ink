@@ -2,6 +2,7 @@
 import { h, Fragment } from '../libraries.bundle.js';
 import { useRef } from '../libraries.bundle.js';
 import { htm } from '../libraries.bundle.js';
+import Icon from '../lib/icons.js';
 
 const html = htm.bind(h);
 
@@ -45,13 +46,10 @@ export default function FileList({ files, activeIndex, onSelect, onAdd, onDelete
 
 	function iconForFile(name) {
 		const ext = name.split('.').pop()?.toLowerCase() ?? '';
-		if (ext === 'html' || ext === 'htm') return 'ti-file-type-html';
-		if (ext === 'js' || ext === 'mjs') return 'ti-file-type-js';
-		if (ext === 'css') return 'ti-file-type-css';
-		if (ext === 'ts') return 'ti-file-type-ts';
-		if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'avif'].includes(ext)) return 'ti-photo';
-		if (ext === 'md') return 'ti-markdown';
-		return 'ti-file';
+		if (['html', 'htm', 'js', 'mjs', 'css', 'ts'].includes(ext)) return 'file-code';
+		if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'avif'].includes(ext)) return 'image';
+		if (ext === 'md') return 'markdown';
+		return 'file';
 	}
 
 	return html`
@@ -59,7 +57,7 @@ export default function FileList({ files, activeIndex, onSelect, onAdd, onDelete
 			<div class="sidebar-header">
 				<span class="sidebar-title">Files</span>
 				<button class="btn btn-icon" aria-label="Toggle sidebar" onClick=${onToggleCollapse}>
-					<i class="ti ${collapsed ? 'ti-layout-sidebar-left-expand' : 'ti-layout-sidebar-left-collapse'}"></i>
+					<${Icon} name=${collapsed ? 'sidebar-expand' : 'sidebar-collapse'} />
 				</button>
 			</div>
 			<ul class="file-list">
@@ -69,21 +67,21 @@ export default function FileList({ files, activeIndex, onSelect, onAdd, onDelete
 						class="file-item ${i === activeIndex ? 'active' : ''}"
 						onClick=${() => onSelect(i)}
 					>
-						<i class="ti ${iconForFile(f.name)}"></i>
+						<${Icon} name=${iconForFile(f.name)} />
 						<span class="file-item-name">${f.name}</span>
 						<button
 							class="file-item-delete"
 							aria-label="Delete file"
 							onClick=${(e) => { e.stopPropagation(); onDelete(i); }}
 						>
-							<i class="ti ti-x"></i>
+							<${Icon} name="x" />
 						</button>
 					</li>
 				`)}
 			</ul>
 			<div class="add-file">
 				<button class="add-file-btn" onClick=${() => inputRef.current?.click()}>
-					<i class="ti ti-plus"></i> add file
+					<${Icon} name="plus" /> add file
 				</button>
 				<input
 					ref=${inputRef}

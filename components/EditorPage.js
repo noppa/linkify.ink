@@ -6,6 +6,7 @@ import FileList from './FileList.js';
 import Editor from './Editor.js';
 import Preview from './Preview.js';
 import ShareModal from './ShareModal.js';
+import Icon from '../lib/icons.js';
 
 const html = htm.bind(h);
 
@@ -121,7 +122,7 @@ export default function EditorPage() {
 				</a>
 				<div class="topbar-actions">
 					<button class="btn btn-primary" onClick=${() => setShowShare(true)}>
-						<i class="ti ti-link"></i> Share
+						<${Icon} name="link" /> Share
 					</button>
 				</div>
 			</div>
