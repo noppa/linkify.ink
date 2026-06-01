@@ -8,6 +8,7 @@ import Preview from './Preview.js';
 import ShareModal from './ShareModal.js';
 import Icon from '../lib/icons.js';
 import { decode } from '../lib/codec.js';
+import { decode as b64decode } from '../lib/base64url.js';
 
 const html = htm.bind(h);
 
@@ -55,6 +56,9 @@ export default function EditorPage() {
 	const [showShare, setShowShare] = useState(false);
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 	const [hashError, setHashError] = useState('');
+	const [hashPending, setHashPending] = useState(/** @type {string | null} */ (null));
+	const [hashPassword, setHashPassword] = useState('');
+	const [hashLoading, setHashLoading] = useState(false);
 
 	// Drag handle state
 	const dividerRef = useRef(/** @type {HTMLDivElement | null} */ (null));
@@ -66,6 +70,23 @@ export default function EditorPage() {
 	useEffect(() => {
 		const hash = window.location.hash;
 		if (!hash || hash.length <= 1) return;
+		try {
+			const raw = hash.startsWith('#') ? hash.slice(1) : hash;
+			const encType = (b64decode(raw)[0] >> 6) & 0x03;
+			if (encType === 2) {
+				// ECDH: navigate to /receive which holds the private key for this session
+				window.location.assign('/receive' + hash);
+				return;
+			}
+			if (encType === 1) {
+				// Password-encrypted: clear the hash from the URL and prompt before decoding
+				window.history.replaceState(null, '', window.location.pathname);
+				setHashPending(hash);
+				return;
+			}
+		} catch {
+			// Malformed payload — fall through to decode() for a proper error message
+		}
 		window.history.replaceState(null, '', window.location.pathname);
 		decode(hash)
 			.then(({ files: decoded }) => {
@@ -117,6 +138,24 @@ export default function EditorPage() {
 			window.removeEventListener('mouseup', onMouseUp);
 		};
 	}, []);
+
+	async function decodeWithPassword() {
+		if (!hashPending || !hashPassword) return;
+		setHashLoading(true);
+		setHashError('');
+		try {
+			const { files: decoded } = await decode(hashPending, { password: hashPassword });
+			setFiles(decoded.map((f) => ({ name: f.name, type: guessType(f.name), content: f.data })));
+			setActiveIndex(0);
+			setHashPending(null);
+			setHashPassword('');
+		} catch (e) {
+			console.error(e);
+			setHashError(e instanceof Error ? e.message : String(e));
+		} finally {
+			setHashLoading(false);
+		}
+	}
 
 	function startDrag() {
 		dragging.current = true;
@@ -219,6 +258,33 @@ export default function EditorPage() {
 			${showShare &&
 			html`
 				<${ShareModal} files=${files} onClose=${() => setShowShare(false)} />
+			`}
+
+			${hashPending && html`
+				<div class="modal-backdrop">
+					<div class="modal">
+						<div class="modal-title"><${Icon} name="lock" /> Password protected</div>
+						<div class="modal-row">
+							<label>Password</label>
+							<input
+								type="password"
+								value=${hashPassword}
+								onInput=${(e) => setHashPassword(e.target.value)}
+								onKeyDown=${(e) => e.key === 'Enter' && decodeWithPassword()}
+								autofocus
+							/>
+						</div>
+						${hashError && html`<div class="modal-row modal-error">${hashError}</div>`}
+						<div class="modal-actions">
+							<button class="btn" onClick=${() => { setHashPending(null); setHashPassword(''); setHashError(''); }}>
+								Cancel
+							</button>
+							<button class="btn btn-primary" onClick=${decodeWithPassword} disabled=${hashLoading}>
+								${hashLoading ? 'Decrypting…' : 'Open'}
+							</button>
+						</div>
+					</div>
+				</div>
 			`}
 		</div>
 	`;
