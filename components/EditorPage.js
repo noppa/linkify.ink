@@ -151,7 +151,7 @@ export default function EditorPage() {
 			setHashPassword('');
 		} catch (e) {
 			console.error(e);
-			setHashError(e instanceof Error ? e.message : String(e));
+			setHashError('Decryption failed. Wrong password?');
 		} finally {
 			setHashLoading(false);
 		}
