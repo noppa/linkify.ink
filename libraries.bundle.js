@@ -3163,10 +3163,13 @@ var zstd_default = "data:application/wasm;base64,AGFzbQEAAAAB0gIkYAR/f39/AX9gBX9
 
 // libraries.js
 var Argon2 = __toESM(require_argon23());
+var import_argon2 = __toESM(require_argon22());
+var export_argon2WasmBase64DataUrl = import_argon2.default;
 export {
   Argon2,
   S as Fragment,
   index_web_exports as ZstdWasm,
+  export_argon2WasmBase64DataUrl as argon2WasmBase64DataUrl,
   k as h,
   htm_module_default as htm,
   g2 as marked,
@@ -3175,5 +3178,5 @@ export {
   y2 as useEffect,
   A2 as useRef,
   d2 as useState,
-  zstd_default as zstdWasmUrl
+  zstd_default as zstdWasmBase64DataUrl
 };
