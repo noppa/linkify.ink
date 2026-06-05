@@ -78,13 +78,17 @@ export default function ReceivePage() {
 	/** @param {string} input @returns {string | null} */
 	function parseHash(input) {
 		const trimmed = input.trim();
-		try {
-			const url = new URL(trimmed);
-			if (url.hash && url.hash.length > 1) return url.hash;
-		} catch {}
-		if (trimmed.startsWith('#') && trimmed.length > 1) return trimmed;
-		if (trimmed.length > 0) return '#' + trimmed;
-		return null;
+		if (!trimmed) return null;
+		// If '#' appears within the first 50 chars (i.e. as part of a URL), strip everything before it
+		const hashIdx = trimmed.indexOf('#');
+		if (hashIdx !== -1 && hashIdx < 50) {
+			const rest = trimmed.slice(hashIdx);
+			return rest.length > 1 ? rest : null;
+		}
+		// Looks like a URL but has no '#' — nothing to decode
+		if (/^https?:\/\//i.test(trimmed)) return null;
+		// Raw hash value without '#' prefix
+		return '#' + trimmed;
 	}
 
 	/** @param {string} hash @returns {number} */
