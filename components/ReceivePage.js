@@ -16,6 +16,7 @@ const SESSION_KEY = 'linkify-ecdh-session';
 
 export default function ReceivePage() {
 	const [pasteInput, setPasteInput] = useState('');
+	const [password, setPassword] = useState('');
 	const [files, setFiles] = useState(/** @type {FileEntry[] | null} */ (null));
 	const [error, setError] = useState('');
 	const [loading, setLoading] = useState(false);
@@ -85,27 +86,36 @@ export default function ReceivePage() {
 		return null;
 	}
 
-	async function handleDecrypt() {
-		const hash = parseHash(pasteInput);
-		if (!hash) { setError('Paste a valid encrypted link'); return; }
+	/** @param {string} hash @returns {number} */
+	function peekEncType(hash) {
+		try {
+			const raw = hash.startsWith('#') ? hash.slice(1) : hash;
+			return (b64decode(raw)[0] >> 6) & 0x03;
+		} catch {
+			return 0;
+		}
+	}
+
+	const parsedHash = parseHash(pasteInput);
+	const detectedEncType = parsedHash ? peekEncType(parsedHash) : null;
+
+	async function handleOpen() {
+		if (!parsedHash) { setError('Paste a valid link or hash'); return; }
 
 		setLoading(true);
 		setError('');
 
-		let isEcdh = false;
 		try {
-			const raw = hash.startsWith('#') ? hash.slice(1) : hash;
-			isEcdh = ((b64decode(raw)[0] >> 6) & 0x03) === 2;
-		} catch {}
-
-		try {
-			/** @type {{ privateKey?: CryptoKey }} */
+			/** @type {{ password?: string, privateKey?: CryptoKey }} */
 			const opts = {};
-			if (isEcdh) {
+			if (detectedEncType === 2) {
 				if (!ecdhPrivateKey) throw new Error('Keypair not ready — please wait a moment and try again');
 				opts.privateKey = ecdhPrivateKey;
+			} else if (detectedEncType === 1) {
+				if (!password) { setError('Enter the password'); setLoading(false); return; }
+				opts.password = password;
 			}
-			const result = await decode(hash, opts);
+			const result = await decode(parsedHash, opts);
 			setFiles(result.files.map((f) => ({
 				name: f.name,
 				type: guessType(f.name),
@@ -114,10 +124,13 @@ export default function ReceivePage() {
 		} catch (e) {
 			console.error(e);
 			const msg = e instanceof Error ? e.message : String(e);
-			setError(isEcdh
-				? 'Decryption failed. The link may not have been encrypted with your public key.'
-				: msg
-			);
+			if (detectedEncType === 2) {
+				setError('Decryption failed. The link may not have been encrypted with your public key.');
+			} else if (detectedEncType === 1) {
+				setError('Decryption failed. Wrong password?');
+			} else {
+				setError(msg);
+			}
 		} finally {
 			setLoading(false);
 		}
@@ -141,6 +154,9 @@ export default function ReceivePage() {
 		setKeyCopied(true);
 		setTimeout(() => setKeyCopied(false), 1500);
 	}
+
+	const openDisabled = loading || !pasteInput.trim()
+		|| (detectedEncType === 2 && !ecdhPrivateKey);
 
 	return html`
 		<div class="receive-page">
@@ -169,23 +185,35 @@ export default function ReceivePage() {
 
 					<div class="receive-divider"></div>
 
-					<div class="receive-section-title"><${Icon} name="download" /> Open encrypted link</div>
-					<p class="receive-hint">Paste the encrypted link the sender shared with you.</p>
+					<div class="receive-section-title"><${Icon} name="download" /> Open a shared link</div>
+					<p class="receive-hint">Paste a link from the sender. Works for all link types — unencrypted, password-protected, or encrypted with your public key above.</p>
 					<textarea
 						class="modal-textarea"
 						value=${pasteInput}
-						onInput=${(e) => { setPasteInput(/** @type {HTMLTextAreaElement} */ (e.target).value); setError(''); }}
+						onInput=${(e) => { setPasteInput(/** @type {HTMLTextAreaElement} */ (e.target).value); setError(''); setPassword(''); }}
 						placeholder="https://linkify.ink/#..."
 						rows="3"
 					></textarea>
+					${detectedEncType === 1 && html`
+						<div class="modal-row">
+							<label>Password</label>
+							<input
+								type="password"
+								value=${password}
+								onInput=${(e) => setPassword(/** @type {HTMLInputElement} */ (e.target).value)}
+								onKeyDown=${(e) => e.key === 'Enter' && handleOpen()}
+								autofocus
+							/>
+						</div>
+					`}
 					${error && html`<div class="modal-error">${error}</div>`}
 					<div class="modal-actions" style="justify-content:flex-start">
 						<button
 							class="btn btn-primary"
-							onClick=${handleDecrypt}
-							disabled=${loading || !pasteInput.trim() || !ecdhPrivateKey}
+							onClick=${handleOpen}
+							disabled=${openDisabled}
 						>
-							${loading ? 'Decrypting…' : 'Open'}
+							${loading ? 'Opening…' : 'Open'}
 						</button>
 					</div>
 				</div>
