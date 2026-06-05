@@ -59,8 +59,14 @@ export default function ShareModal({ files, onClose }) {
 		}
 	}
 
+	// For ECDH, share only the hash fragment — the receiver pastes it into /receive directly,
+	// and opening the full URL would generate a new keypair that can't decrypt the payload.
+	const shareValue = url && encryption === 'ecdh'
+		? url.slice(url.indexOf('#'))
+		: url;
+
 	async function copyUrl() {
-		await navigator.clipboard.writeText(url);
+		await navigator.clipboard.writeText(shareValue);
 		setCopied(true);
 		setTimeout(() => setCopied(false), 1500);
 	}
@@ -73,10 +79,10 @@ export default function ShareModal({ files, onClose }) {
 		if (e.target === e.currentTarget) onClose();
 	}
 
-	const urlLen = url.length;
+	const shareLen = shareValue.length;
 	const urlWarning =
-		urlLen > 32000
-			? `Warning: URL is ${urlLen.toLocaleString()} chars — some browsers may truncate it.`
+		shareLen > 32000
+			? `Warning: payload is ${shareLen.toLocaleString()} chars — some browsers may truncate it.`
 			: '';
 
 	return html`
@@ -116,11 +122,10 @@ export default function ShareModal({ files, onClose }) {
 				html`
 					<ol class="modal-ecdh-guide">
 						<li>
-							Ask the recipient to open
+							Ask the recipient to open${' '}
 							<a href=${`${location.origin}/receive`} target="_blank"
 								>${location.origin}/receive</a
-							>
-							in their browser.
+							>${' '}in their browser.
 						</li>
 						<li>
 							Have them copy their public key and send it to you. Paste it
@@ -145,15 +150,13 @@ export default function ShareModal({ files, onClose }) {
 				${url &&
 				html`
 					<div class="modal-row">
-						<label
-							>Your link
-							${urlLen > 0
-								? html`<span class="modal-url-length"
-										>${urlLen.toLocaleString()} chars</span
-									>`
-								: ''}</label
-						>
-						<div class="modal-url">${url}</div>
+						<label>
+							${encryption === 'ecdh' ? 'Encrypted payload' : 'Your link'}
+							${shareLen > 0
+								? html`<span class="modal-url-length">${shareLen.toLocaleString()} chars</span>`
+								: ''}
+						</label>
+						<div class="modal-url">${shareValue}</div>
 						${urlWarning && html`<div class="modal-error">${urlWarning}</div>`}
 					</div>
 				`}
@@ -162,8 +165,8 @@ export default function ShareModal({ files, onClose }) {
 					<button class="btn" onClick=${onClose}>Cancel</button>
 					${url &&
 					html`<${Fragment}>
-						<button class="btn" onClick=${openUrl}>Open <${Icon} name="link-external" /></button>
-						<button class="btn" onClick=${copyUrl}>${copied ? 'Copied!' : 'Copy link'}</button>
+						${encryption !== 'ecdh' && html`<button class="btn" onClick=${openUrl}>Open <${Icon} name="link-external" /></button>`}
+						<button class="btn" onClick=${copyUrl}>${copied ? 'Copied!' : encryption === 'ecdh' ? 'Copy payload' : 'Copy link'}</button>
 					</${Fragment}>`}
 					<button
 						class="btn btn-primary"
