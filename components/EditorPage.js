@@ -10,6 +10,7 @@ import Icon from '../lib/icons.js';
 import { decode } from '../lib/codec.js';
 import { decode as b64decode } from '../lib/base64url.js';
 import { downloadFiles } from '../lib/download.js';
+import { takePendingFiles } from '../lib/transfer.js';
 
 const html = htm.bind(h);
 
@@ -295,16 +296,5 @@ export default function EditorPage() {
 }
 
 function loadInitialFiles() {
-	// Check if redirected from /receive with files in sessionStorage
-	try {
-		const stored = sessionStorage.getItem('linkify-received-files');
-		if (stored) {
-			sessionStorage.removeItem('linkify-received-files');
-			const parsed = JSON.parse(stored);
-			return parsed.map((f) => ({ ...f, content: new Uint8Array(f.content) }));
-		}
-	} catch {
-		/* ignore */
-	}
-	return DEFAULT_FILES;
+	return takePendingFiles() ?? DEFAULT_FILES;
 }

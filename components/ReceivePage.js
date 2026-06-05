@@ -7,6 +7,7 @@ import { decode } from '../lib/codec.js';
 import { decode as b64decode, encode as b64encode } from '../lib/base64url.js';
 import { generateEcdhKeypair, exportPublicKey } from '../lib/crypto.js';
 import { downloadFiles } from '../lib/download.js';
+import { setPendingFiles } from '../lib/transfer.js';
 
 const html = htm.bind(h);
 
@@ -138,11 +139,9 @@ export default function ReceivePage() {
 
 	function openInEditor() {
 		if (!files) return;
-		const serialized = JSON.stringify(
-			files.map((f) => ({ name: f.name, type: f.type, content: Array.from(f.content) })),
-		);
-		sessionStorage.setItem('linkify-received-files', serialized);
-		window.location.href = '/';
+		setPendingFiles(files);
+		history.pushState(null, '', '/');
+		window.dispatchEvent(new PopStateEvent('popstate'));
 	}
 
 	function downloadAll() {
