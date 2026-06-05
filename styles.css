@@ -471,6 +471,17 @@ html, body {
 	letter-spacing: 0;
 }
 
+.modal-ecdh-guide {
+	font-size: 12px;
+	color: var(--text-muted);
+	line-height: 1.6;
+	padding-left: 18px;
+}
+
+.modal-ecdh-guide a {
+	color: var(--accent);
+}
+
 .modal-error {
 	color: #e05a5a;
 	font-size: 12px;
@@ -558,6 +569,12 @@ html, body {
 	border-radius: 4px;
 	color: var(--text-muted);
 	user-select: all;
+}
+
+.receive-divider {
+	border: none;
+	border-top: 1px solid var(--border);
+	margin: 4px 0;
 }
 
 .receive-file-list {

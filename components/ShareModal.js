@@ -114,13 +114,29 @@ export default function ShareModal({ files, onClose }) {
 				`}
 				${encryption === 'ecdh' &&
 				html`
+					<ol class="modal-ecdh-guide">
+						<li>
+							Ask the recipient to open
+							<a href=${`${location.origin}/receive`} target="_blank"
+								>${location.origin}/receive</a
+							>
+							in their browser.
+						</li>
+						<li>
+							Have them copy their public key and send it to you. Paste it
+							below.
+						</li>
+						<li>
+							Generate the link and send it to them — only they can decrypt it.
+						</li>
+					</ol>
 					<div class="modal-row">
 						<label>Recipient's public key</label>
 						<textarea
 							class="modal-textarea"
 							value=${recipientKey}
 							onInput=${(e) => setRecipientKey(e.target.value)}
-							placeholder="Paste the base64url public key from the /receive page"
+							placeholder="Paste the recipient's public key"
 							rows="3"
 						></textarea>
 					</div>

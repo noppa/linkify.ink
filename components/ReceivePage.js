@@ -6,73 +6,118 @@ import Icon from '../lib/icons.js';
 import { decode } from '../lib/codec.js';
 import { decode as b64decode, encode as b64encode } from '../lib/base64url.js';
 import { generateEcdhKeypair, exportPublicKey } from '../lib/crypto.js';
+import { downloadFiles } from '../lib/download.js';
 
 const html = htm.bind(h);
+
+const SESSION_KEY = 'linkify-ecdh-session';
 
 /** @typedef {{ name: string, type: string, content: Uint8Array }} FileEntry */
 
 export default function ReceivePage() {
-	const hash = window.location.hash;
-
-	const [password, setPassword] = useState('');
+	const [pasteInput, setPasteInput] = useState('');
 	const [files, setFiles] = useState(/** @type {FileEntry[] | null} */ (null));
 	const [error, setError] = useState('');
 	const [loading, setLoading] = useState(false);
-	const [needsPassword, setNeedsPassword] = useState(false);
-	const [isEcdh, setIsEcdh] = useState(false);
 
-	// Ephemeral ECDH keypair for this session
 	const [ecdhPublicKey, setEcdhPublicKey] = useState('');
 	const [ecdhPrivateKey, setEcdhPrivateKey] = useState(/** @type {CryptoKey | null} */ (null));
 	const [keyCopied, setKeyCopied] = useState(false);
 
-	// Generate ephemeral ECDH keypair on mount (for the /receive → sender flow)
+	// Restore or generate ECDH keypair, persisted in sessionStorage so same-tab navigations preserve it.
+	// This matters because the editor redirects ECDH links to /receive#<hash>, which would otherwise
+	// generate a new keypair (unable to decrypt the payload encrypted with the original one).
 	useEffect(() => {
-		generateEcdhKeypair().then(async ({ publicKey, privateKey }) => {
-			const raw = await exportPublicKey(publicKey);
-			setEcdhPublicKey(b64encode(raw));
+		async function setup() {
+			try {
+				const stored = sessionStorage.getItem(SESSION_KEY);
+				if (stored) {
+					const { privateKeyJwk, publicKeyRaw } = JSON.parse(stored);
+					const pk = await crypto.subtle.importKey(
+						'jwk', privateKeyJwk,
+						{ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey'],
+					);
+					setEcdhPrivateKey(pk);
+					setEcdhPublicKey(publicKeyRaw);
+					return;
+				}
+			} catch { /* fall through to generate */ }
+
+			const { publicKey, privateKey } = await generateEcdhKeypair();
+			const rawPub = await exportPublicKey(publicKey);
+			const pubBase64 = b64encode(rawPub);
+			const jwk = await crypto.subtle.exportKey('jwk', privateKey);
+			try {
+				sessionStorage.setItem(SESSION_KEY, JSON.stringify({ privateKeyJwk: jwk, publicKeyRaw: pubBase64 }));
+			} catch { /* may fail in private mode */ }
+			setEcdhPublicKey(pubBase64);
 			setEcdhPrivateKey(privateKey);
-		}).catch(() => { /* ignore — ECDH simply won't be offered */ });
+		}
+		setup().catch(console.error);
 	}, []);
 
-	// Auto-decode on load if no password/key needed
+	// Pre-fill the paste input when redirected from the editor (e.g. /receive#<ecdh-hash>)
 	useEffect(() => {
-		if (!hash) return;
-		try {
-			const raw = hash.startsWith('#') ? hash.slice(1) : hash;
-			const buf = b64decode(raw);
-			const encType = (buf[0] >> 6) & 0x03;
-			if (encType === 0) {
-				handleDecode();
-			} else if (encType === 1) {
-				setNeedsPassword(true);
-			} else if (encType === 2) {
-				setIsEcdh(true);
-			}
-		} catch { /* ignore */ }
+		const hash = window.location.hash;
+		if (hash && hash.length > 1) {
+			setPasteInput(window.location.href);
+			window.history.replaceState(null, '', window.location.pathname);
+		}
 	}, []);
 
-	async function handleDecode() {
+	// Warn before closing the tab while the keypair is active and no files have been received yet
+	useEffect(() => {
+		if (!ecdhPrivateKey || files) return;
+		function onBeforeUnload(e) { e.preventDefault(); }
+		window.addEventListener('beforeunload', onBeforeUnload);
+		return () => window.removeEventListener('beforeunload', onBeforeUnload);
+	}, [ecdhPrivateKey, files]);
+
+	/** @param {string} input @returns {string | null} */
+	function parseHash(input) {
+		const trimmed = input.trim();
+		try {
+			const url = new URL(trimmed);
+			if (url.hash && url.hash.length > 1) return url.hash;
+		} catch {}
+		if (trimmed.startsWith('#') && trimmed.length > 1) return trimmed;
+		if (trimmed.length > 0) return '#' + trimmed;
+		return null;
+	}
+
+	async function handleDecrypt() {
+		const hash = parseHash(pasteInput);
+		if (!hash) { setError('Paste a valid encrypted link'); return; }
+
 		setLoading(true);
 		setError('');
+
+		let isEcdh = false;
 		try {
-			/** @type {{ password?: string, privateKey?: CryptoKey }} */
+			const raw = hash.startsWith('#') ? hash.slice(1) : hash;
+			isEcdh = ((b64decode(raw)[0] >> 6) & 0x03) === 2;
+		} catch {}
+
+		try {
+			/** @type {{ privateKey?: CryptoKey }} */
 			const opts = {};
-			if (needsPassword) opts.password = password;
 			if (isEcdh) {
-				if (!ecdhPrivateKey) throw new Error('ECDH private key not ready — please wait a moment and try again');
+				if (!ecdhPrivateKey) throw new Error('Keypair not ready — please wait a moment and try again');
 				opts.privateKey = ecdhPrivateKey;
 			}
 			const result = await decode(hash, opts);
-			const typedFiles = result.files.map((f) => ({
+			setFiles(result.files.map((f) => ({
 				name: f.name,
 				type: guessType(f.name),
 				content: f.data,
-			}));
-			setFiles(typedFiles);
+			})));
 		} catch (e) {
 			console.error(e);
-			setError(e instanceof Error ? e.message : String(e));
+			const msg = e instanceof Error ? e.message : String(e);
+			setError(isEcdh
+				? 'Decryption failed. The link may not have been encrypted with your public key.'
+				: msg
+			);
 		} finally {
 			setLoading(false);
 		}
@@ -88,15 +133,7 @@ export default function ReceivePage() {
 	}
 
 	function downloadAll() {
-		if (!files) return;
-		for (const f of files) {
-			const blob = new Blob([f.content], { type: f.type });
-			const a = document.createElement('a');
-			a.href = URL.createObjectURL(blob);
-			a.download = f.name;
-			a.click();
-			URL.revokeObjectURL(a.href);
-		}
+		if (files) downloadFiles(files);
 	}
 
 	async function copyKey() {
@@ -114,54 +151,43 @@ export default function ReceivePage() {
 
 			${!files && html`
 				<div class="receive-card">
-					${!hash && html`<>
-						<div class="receive-section-title">Your receive session</div>
-						<p class="receive-hint">
-							Share this public key with the sender. They will use it to encrypt files for you.
-							<strong>Do not reload this tab</strong> — your private key lives only in memory.
-						</p>
-						${ecdhPublicKey
-							? html`
-								<div class="receive-pubkey">${ecdhPublicKey}</div>
-								<button class="btn" onClick=${copyKey}>
-									${keyCopied ? 'Copied!' : 'Copy public key'}
-								</button>
-							`
-							: html`<div class="receive-hint">Generating keypair…</div>`
-						}
-					</>`}
-
-					${hash && html`<>
-						<div class="receive-section-title">Receive files</div>
-
-						${needsPassword && html`
-							<div class="modal-row">
-								<label>Password</label>
-								<input
-									type="password"
-									value=${password}
-									onInput=${(e) => setPassword(e.target.value)}
-									placeholder="Enter password"
-									onKeyDown=${(e) => e.key === 'Enter' && handleDecode()}
-								/>
-							</div>
-						`}
-
-						${isEcdh && html`
-							<p class="receive-hint">
-								This payload was encrypted with your public key.
-								Click decrypt to open it using your session's private key.
-							</p>
-						`}
-
-						${error && html`<div class="modal-error">${error}</div>`}
-
-						<div class="modal-actions" style="justify-content:flex-start">
-							<button class="btn btn-primary" onClick=${handleDecode} disabled=${loading || (isEcdh && !ecdhPrivateKey)}>
-								${loading ? 'Decrypting…' : 'Decrypt & Open'}
+					<div class="receive-section-title"><${Icon} name="lock" /> Your public key</div>
+					<p class="receive-hint">
+						Copy this key and share it with the sender. They'll use it in the Share dialog to encrypt files exclusively for you.${' '}
+						<strong>Do not close this tab</strong> — your private key exists only in this browser session.
+					</p>
+					${ecdhPublicKey
+						? html`
+							<div class="receive-pubkey">${ecdhPublicKey}</div>
+							<button class="btn" onClick=${copyKey}>
+								<${Icon} name=${keyCopied ? 'check' : 'copy'} />
+								${keyCopied ? 'Copied!' : 'Copy public key'}
 							</button>
-						</div>
-					</>`}
+						`
+						: html`<p class="receive-hint">Generating keypair…</p>`
+					}
+
+					<div class="receive-divider"></div>
+
+					<div class="receive-section-title"><${Icon} name="download" /> Open encrypted link</div>
+					<p class="receive-hint">Paste the encrypted link the sender shared with you.</p>
+					<textarea
+						class="modal-textarea"
+						value=${pasteInput}
+						onInput=${(e) => { setPasteInput(/** @type {HTMLTextAreaElement} */ (e.target).value); setError(''); }}
+						placeholder="https://linkify.ink/#..."
+						rows="3"
+					></textarea>
+					${error && html`<div class="modal-error">${error}</div>`}
+					<div class="modal-actions" style="justify-content:flex-start">
+						<button
+							class="btn btn-primary"
+							onClick=${handleDecrypt}
+							disabled=${loading || !pasteInput.trim() || !ecdhPrivateKey}
+						>
+							${loading ? 'Decrypting…' : 'Open'}
+						</button>
+					</div>
 				</div>
 			`}
 

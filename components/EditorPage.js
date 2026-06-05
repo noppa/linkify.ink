@@ -9,6 +9,7 @@ import ShareModal from './ShareModal.js';
 import Icon from '../lib/icons.js';
 import { decode } from '../lib/codec.js';
 import { decode as b64decode } from '../lib/base64url.js';
+import { downloadFiles } from '../lib/download.js';
 
 const html = htm.bind(h);
 
@@ -213,6 +214,9 @@ export default function EditorPage() {
 					linkify.ink
 				</a>
 				<div class="topbar-actions">
+					<button class="btn" onClick=${() => downloadFiles(files)}>
+						<${Icon} name="download" /> Download
+					</button>
 					<button class="btn btn-primary" onClick=${() => setShowShare(true)}>
 						<${Icon} name="link" /> Share
 					</button>
