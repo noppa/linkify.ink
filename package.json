@@ -5,8 +5,8 @@
 	"main": "index.js",
 	"scripts": {
 		"start": "node dev-server.mjs",
-		"bundle-libs": "esbuild libraries.js --bundle --format=esm --platform=browser --outfile=libraries.bundle.js --loader:.wasm=dataurl --external:fs --external:path",
-		"typecheck": "tsgo --noEmit",
+		"bundle-libs": "esbuild libraries.js --bundle --format=esm --platform=browser --outfile=libraries.bundle.js --loader:.wasm=dataurl --external:fs --external:path --banner:js='// @ts-nocheck\n// Auto-generated bundle of dependencies'",
+		"typecheck": "tsc --noEmit -p jsconfig.json",
 		"lint": "oxlint .",
 		"test": "echo \"Error: no test specified\" && exit 1"
 	},
@@ -15,12 +15,13 @@
 	"license": "ISC",
 	"devDependencies": {
 		"@bokuweb/zstd-wasm": "^0.0.27",
-		"@typescript/native-preview": "^7.0.0-dev.20251228.1",
+		"@types/node": "^25.9.2",
 		"argon2-browser": "^1.18.0",
 		"esbuild": "^0.28.0",
 		"htm": "^3.1.1",
 		"marked": "^18.0.3",
 		"oxlint": "^1.35.0",
-		"preact": "^10.29.2"
+		"preact": "^10.29.2",
+		"typescript": "^6.0.3"
 	}
 }
