@@ -61,8 +61,8 @@ compression, Argon2id + AES-GCM encryption, WebCrypto API.
 - [ ] Test sandbox iframe preview with a multi-file HTML project (HTML + CSS + JS)
 
 ### Features / polish
-- [ ] New file creation dialog (currently only supports uploading existing files via file picker)
-- [ ] Rename file support
+- [x] New file creation dialog (currently only supports uploading existing files via file picker)
+- [x] Rename file support
 - [ ] Error boundary around the whole app
 - [ ] Loading indicator while zstd/argon2 WASM initialises on first encode
 - [ ] Drag-and-drop file upload onto the editor area
