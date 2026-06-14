@@ -4,10 +4,11 @@ import { useEffect, useRef } from '../libraries.bundle.js';
 import { htm } from '../libraries.bundle.js';
 import { marked } from '../libraries.bundle.js';
 import Icon from '../lib/icons.js';
+import { guessType } from '../lib/filetypes.js';
 
 const html = htm.bind(h);
 
-/** @typedef {{ name: string, type: string, content: Uint8Array }} FileEntry */
+/** @typedef {import('../lib/types.js').FileEntry} FileEntry */
 
 const HOSTED_ORIGIN = 'linkify.ink';
 const SANDBOX_BASE = 'sandbox.linkify.ink';
@@ -26,55 +27,12 @@ export default function Preview({ files, activeFile }) {
 	const sandboxCleanupRef = useRef(/** @type {(() => void) | null} */ (null));
 
 	useEffect(() => {
-		if (!activeFile) return;
 		const iframe = iframeRef.current;
-		if (!iframe) return;
+		if (!activeFile || !iframe) return;
+		const file = activeFile;
 
-		// Clean up previous blob URL and sandbox listener
-		if (blobUrlRef.current) {
-			URL.revokeObjectURL(blobUrlRef.current);
-			blobUrlRef.current = null;
-		}
-		if (sandboxCleanupRef.current) {
-			sandboxCleanupRef.current();
-			sandboxCleanupRef.current = null;
-		}
-
-		const ext = activeFile.name.split('.').pop()?.toLowerCase() ?? '';
-
-		if (ext === 'md') {
-			const mdText = new TextDecoder().decode(activeFile.content);
-			const rendered = /** @type {string} */ (marked.parse(mdText));
-			const blob = new Blob([`<html><body style="font-family:sans-serif;padding:16px;max-width:720px">${rendered}</body></html>`], { type: 'text/html' });
-			const url = URL.createObjectURL(blob);
-			blobUrlRef.current = url;
-			iframe.src = url;
-		} else if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'svg'].includes(ext)) {
-			const type = activeFile.type || `image/${ext === 'svg' ? 'svg+xml' : ext}`;
-			const blob = new Blob([/** @type {any} */ (activeFile.content)], { type });
-			const url = URL.createObjectURL(blob);
-			blobUrlRef.current = url;
-			iframe.src = url;
-		} else if (ext === 'html' || ext === 'htm') {
-			if (isHosted) {
-				sandboxCleanupRef.current = setupSandboxIframe(iframe, files, activeFile);
-			} else {
-				// Blob URL fallback for local dev (relative imports won't resolve)
-				const content = new TextDecoder().decode(activeFile.content);
-				const blob = new Blob([content], { type: 'text/html' });
-				const url = URL.createObjectURL(blob);
-				blobUrlRef.current = url;
-				iframe.src = url;
-			}
-		} else {
-			const text = new TextDecoder().decode(activeFile.content);
-			const blob = new Blob([`<pre style="margin:0;padding:10px;font-family:monospace;white-space:pre-wrap">${escapeHtml(text)}</pre>`], { type: 'text/html' });
-			const url = URL.createObjectURL(blob);
-			blobUrlRef.current = url;
-			iframe.src = url;
-		}
-
-		return () => {
+		// Revoke the current blob URL / tear down the current sandbox listener.
+		function cleanup() {
 			if (blobUrlRef.current) {
 				URL.revokeObjectURL(blobUrlRef.current);
 				blobUrlRef.current = null;
@@ -83,6 +41,43 @@ export default function Preview({ files, activeFile }) {
 				sandboxCleanupRef.current();
 				sandboxCleanupRef.current = null;
 			}
+		}
+
+		/** @param {string} src */
+		function showBlob(src, type = 'text/html') {
+			const url = URL.createObjectURL(new Blob([src], { type }));
+			blobUrlRef.current = url;
+			iframe.src = url;
+		}
+
+		function renderPreview() {
+			const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+			if (ext === 'md') {
+				const rendered = /** @type {string} */ (marked.parse(new TextDecoder().decode(file.content)));
+				showBlob(`<html><body style="font-family:sans-serif;padding:16px;max-width:720px">${rendered}</body></html>`);
+			} else if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'svg'].includes(ext)) {
+				const url = URL.createObjectURL(new Blob([file.content], { type: file.type || guessType(file.name, 'image/png') }));
+				blobUrlRef.current = url;
+				iframe.src = url;
+			} else if (ext === 'html' || ext === 'htm') {
+				if (isHosted) {
+					sandboxCleanupRef.current = setupSandboxIframe(iframe, files, file);
+				} else {
+					// Blob URL fallback for local dev (relative imports won't resolve)
+					showBlob(new TextDecoder().decode(file.content));
+				}
+			} else {
+				const text = escapeHtml(new TextDecoder().decode(file.content));
+				showBlob(`<pre style="margin:0;padding:10px;font-family:monospace;white-space:pre-wrap">${text}</pre>`);
+			}
+		}
+
+		// Debounce so rapid edits don't thrash the preview — rebuilding the sandbox
+		// iframe on every keystroke is expensive.
+		const timer = setTimeout(renderPreview, 150);
+		return () => {
+			clearTimeout(timer);
+			cleanup();
 		};
 	}, [activeFile, files]);
 

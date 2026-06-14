@@ -9,7 +9,7 @@ import { importPublicKey } from '../lib/crypto.js';
 
 const html = htm.bind(h);
 
-/** @typedef {{ name: string, type: string, content: Uint8Array }} FileEntry */
+/** @typedef {import('../lib/types.js').FileEntry} FileEntry */
 
 /**
  * @param {{

@@ -1,5 +1,5 @@
 // @ts-check
-import { h, render, Fragment } from './libraries.bundle.js';
+import { h, render } from './libraries.bundle.js';
 import { useState, useEffect } from './libraries.bundle.js';
 import { htm } from './libraries.bundle.js';
 import EditorPage from './components/EditorPage.js';

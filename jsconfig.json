@@ -10,6 +10,11 @@
 		"moduleResolution": "bundler",
 		"lib": ["ESNext", "DOM"]
 	},
-	"include": ["**/*.js", "**/*.mjs"],
+	"include": [
+		"lib/**/*.js",
+		"lib/**/*.mjs",
+		"components/**/*.js",
+		"components/**/*.mjs"
+	],
 	"exclude": ["libraries.bundle.js", "node_modules", "vendors"]
 }
