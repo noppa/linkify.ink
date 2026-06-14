@@ -1,5 +1,5 @@
 // @ts-check
-import { h, Fragment } from '../libraries.bundle.js';
+import { h } from '../libraries.bundle.js';
 import { useState, useEffect, useRef } from '../libraries.bundle.js';
 import { htm } from '../libraries.bundle.js';
 import FileList from './FileList.js';
@@ -7,28 +7,14 @@ import Editor from './Editor.js';
 import Preview from './Preview.js';
 import ShareModal from './ShareModal.js';
 import Icon from '../lib/icons.js';
-import { decode } from '../lib/codec.js';
-import { decode as b64decode } from '../lib/base64url.js';
+import { decode, peekEncryptionType, ENC_PASSWORD, ENC_ECDH } from '../lib/codec.js';
+import { guessType } from '../lib/filetypes.js';
 import { downloadFiles } from '../lib/download.js';
 import { takePendingFiles } from '../lib/transfer.js';
 
 const html = htm.bind(h);
 
-/** @typedef {{ name: string, type: string, content: Uint8Array }} FileEntry */
-
-/** @param {string} name */
-function guessType(name) {
-	const ext = name.split('.').pop()?.toLowerCase() ?? '';
-	/** @type {Record<string, string>} */
-	const map = {
-		html: 'text/html', htm: 'text/html', css: 'text/css',
-		js: 'text/javascript', mjs: 'text/javascript', ts: 'text/typescript',
-		json: 'application/json', md: 'text/markdown', txt: 'text/plain',
-		svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg',
-		jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif',
-	};
-	return map[ext] || 'application/octet-stream';
-}
+/** @typedef {import('../lib/types.js').FileEntry} FileEntry */
 
 const DEFAULT_FILES = [
 	{
@@ -53,7 +39,7 @@ const DEFAULT_FILES = [
 ];
 
 export default function EditorPage() {
-	const [files, setFiles] = useState(() => loadInitialFiles());
+	const [files, setFiles] = useState(() => takePendingFiles() ?? DEFAULT_FILES);
 	const [activeIndex, setActiveIndex] = useState(0);
 	const [showShare, setShowShare] = useState(false);
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -72,22 +58,17 @@ export default function EditorPage() {
 	useEffect(() => {
 		const hash = window.location.hash;
 		if (!hash || hash.length <= 1) return;
-		try {
-			const raw = hash.startsWith('#') ? hash.slice(1) : hash;
-			const encType = (b64decode(raw)[0] >> 6) & 0x03;
-			if (encType === 2) {
-				// ECDH: navigate to /receive which holds the private key for this session
-				window.location.assign('/receive' + hash);
-				return;
-			}
-			if (encType === 1) {
-				// Password-encrypted: clear the hash from the URL and prompt before decoding
-				window.history.replaceState(null, '', window.location.pathname);
-				setHashPending(hash);
-				return;
-			}
-		} catch {
-			// Malformed payload — fall through to decode() for a proper error message
+		const encType = peekEncryptionType(hash);
+		if (encType === ENC_ECDH) {
+			// ECDH: navigate to /receive which holds the private key for this session
+			window.location.assign('/receive' + hash);
+			return;
+		}
+		if (encType === ENC_PASSWORD) {
+			// Password-encrypted: clear the hash from the URL and prompt before decoding
+			window.history.replaceState(null, '', window.location.pathname);
+			setHashPending(hash);
+			return;
 		}
 		window.history.replaceState(null, '', window.location.pathname);
 		decode(hash)
@@ -293,8 +274,4 @@ export default function EditorPage() {
 			`}
 		</div>
 	`;
-}
-
-function loadInitialFiles() {
-	return takePendingFiles() ?? DEFAULT_FILES;
 }

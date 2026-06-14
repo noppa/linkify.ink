@@ -3,10 +3,11 @@ import { h } from '../libraries.bundle.js';
 import { useState, useEffect } from '../libraries.bundle.js';
 import { htm } from '../libraries.bundle.js';
 import Icon from '../lib/icons.js';
+import { guessType, isTextFile, isImageFile } from '../lib/filetypes.js';
 
 const html = htm.bind(h);
 
-/** @typedef {{ name: string, type: string, content: Uint8Array }} FileEntry */
+/** @typedef {import('../lib/types.js').FileEntry} FileEntry */
 
 /**
  * @param {{
@@ -82,8 +83,8 @@ function ImageViewer({ file, onReplace }) {
 
 	useEffect(() => {
 		if (!file.content.length) return;
-		const type = file.type || guessImageMime(file.name);
-		const url = URL.createObjectURL(new Blob([/** @type {any} */ (file.content)], { type }));
+		const type = file.type || guessType(file.name, 'image/png');
+		const url = URL.createObjectURL(new Blob([file.content], { type }));
 		setBlobUrl(url);
 		return () => URL.revokeObjectURL(url);
 	}, [file.content, file.type]);
@@ -133,8 +134,8 @@ function ImageViewer({ file, onReplace }) {
  */
 async function recompress(file, format) {
 	return new Promise((resolve) => {
-		const type = file.type || guessImageMime(file.name);
-		const blob = new Blob([/** @type {any} */ (file.content)], { type });
+		const type = file.type || guessType(file.name, 'image/png');
+		const blob = new Blob([file.content], { type });
 		const url = URL.createObjectURL(blob);
 		const img = new Image();
 		img.onload = () => {
@@ -163,30 +164,4 @@ async function recompress(file, format) {
 		img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
 		img.src = url;
 	});
-}
-
-/** @param {FileEntry} file */
-function isTextFile(file) {
-	if (file.type.startsWith('text/')) return true;
-	const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
-	return ['html', 'htm', 'css', 'js', 'mjs', 'ts', 'json', 'md', 'txt', 'svg', 'xml'].includes(ext);
-}
-
-/** @param {FileEntry} file */
-function isImageFile(file) {
-	if (file.type.startsWith('image/')) return true;
-	const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
-	return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'bmp', 'ico'].includes(ext);
-}
-
-/** @param {string} name */
-function guessImageMime(name) {
-	const ext = name.split('.').pop()?.toLowerCase() ?? '';
-	/** @type {Record<string, string>} */
-	const map = {
-		png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
-		gif: 'image/gif', webp: 'image/webp', avif: 'image/avif',
-		bmp: 'image/bmp', ico: 'image/x-icon',
-	};
-	return map[ext] ?? 'image/png';
 }

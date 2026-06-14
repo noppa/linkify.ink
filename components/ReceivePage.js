@@ -1,11 +1,12 @@
 // @ts-check
-import { h, Fragment } from '../libraries.bundle.js';
+import { h } from '../libraries.bundle.js';
 import { useState, useEffect } from '../libraries.bundle.js';
 import { htm } from '../libraries.bundle.js';
 import Icon from '../lib/icons.js';
-import { decode } from '../lib/codec.js';
-import { decode as b64decode, encode as b64encode } from '../lib/base64url.js';
+import { decode, peekEncryptionType, ENC_PASSWORD, ENC_ECDH } from '../lib/codec.js';
+import { encode as b64encode } from '../lib/base64url.js';
 import { generateEcdhKeypair, exportPublicKey } from '../lib/crypto.js';
+import { guessType } from '../lib/filetypes.js';
 import { downloadFiles } from '../lib/download.js';
 import { setPendingFiles } from '../lib/transfer.js';
 
@@ -13,7 +14,7 @@ const html = htm.bind(h);
 
 const SESSION_KEY = 'linkify-ecdh-session';
 
-/** @typedef {{ name: string, type: string, content: Uint8Array }} FileEntry */
+/** @typedef {import('../lib/types.js').FileEntry} FileEntry */
 
 export default function ReceivePage() {
 	const [pasteInput, setPasteInput] = useState('');
@@ -91,18 +92,8 @@ export default function ReceivePage() {
 		return '#' + trimmed;
 	}
 
-	/** @param {string} hash @returns {number} */
-	function peekEncType(hash) {
-		try {
-			const raw = hash.startsWith('#') ? hash.slice(1) : hash;
-			return (b64decode(raw)[0] >> 6) & 0x03;
-		} catch {
-			return 0;
-		}
-	}
-
 	const parsedHash = parseHash(pasteInput);
-	const detectedEncType = parsedHash ? peekEncType(parsedHash) : null;
+	const detectedEncType = parsedHash ? peekEncryptionType(parsedHash) : null;
 
 	async function handleOpen() {
 		if (!parsedHash) { setError('Paste a valid link or hash'); return; }
@@ -113,10 +104,10 @@ export default function ReceivePage() {
 		try {
 			/** @type {{ password?: string, privateKey?: CryptoKey }} */
 			const opts = {};
-			if (detectedEncType === 2) {
+			if (detectedEncType === ENC_ECDH) {
 				if (!ecdhPrivateKey) throw new Error('Keypair not ready — please wait a moment and try again');
 				opts.privateKey = ecdhPrivateKey;
-			} else if (detectedEncType === 1) {
+			} else if (detectedEncType === ENC_PASSWORD) {
 				if (!password) { setError('Enter the password'); setLoading(false); return; }
 				opts.password = password;
 			}
@@ -129,9 +120,9 @@ export default function ReceivePage() {
 		} catch (e) {
 			console.error(e);
 			const msg = e instanceof Error ? e.message : String(e);
-			if (detectedEncType === 2) {
+			if (detectedEncType === ENC_ECDH) {
 				setError('Decryption failed. The link may not have been encrypted with your public key.');
-			} else if (detectedEncType === 1) {
+			} else if (detectedEncType === ENC_PASSWORD) {
 				setError('Decryption failed. Wrong password?');
 			} else {
 				setError(msg);
@@ -197,7 +188,7 @@ export default function ReceivePage() {
 						placeholder="https://linkify.ink/#..."
 						rows="3"
 					></textarea>
-					${detectedEncType === 1 && html`
+					${detectedEncType === ENC_PASSWORD && html`
 						<div class="modal-row">
 							<label>Password</label>
 							<input
@@ -246,20 +237,6 @@ export default function ReceivePage() {
 			`}
 		</div>
 	`;
-}
-
-/** @param {string} name */
-function guessType(name) {
-	const ext = name.split('.').pop()?.toLowerCase() ?? '';
-	/** @type {Record<string, string>} */
-	const map = {
-		html: 'text/html', htm: 'text/html', css: 'text/css',
-		js: 'text/javascript', mjs: 'text/javascript', ts: 'text/typescript',
-		json: 'application/json', md: 'text/markdown', txt: 'text/plain',
-		svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg',
-		jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif',
-	};
-	return map[ext] || 'application/octet-stream';
 }
 
 /** @param {number} n */

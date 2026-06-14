@@ -1,26 +1,13 @@
 // @ts-check
-import { h, Fragment } from '../libraries.bundle.js';
+import { h } from '../libraries.bundle.js';
 import { useRef, useState } from '../libraries.bundle.js';
 import { htm } from '../libraries.bundle.js';
 import Icon from '../lib/icons.js';
+import { guessType, iconForFile } from '../lib/filetypes.js';
 
 const html = htm.bind(h);
 
-/** @typedef {{ name: string, type: string, content: Uint8Array }} FileEntry */
-
-/** @param {string} name */
-function guessType(name) {
-	const ext = name.split('.').pop()?.toLowerCase() ?? '';
-	/** @type {Record<string, string>} */
-	const map = {
-		html: 'text/html', htm: 'text/html', css: 'text/css',
-		js: 'text/javascript', mjs: 'text/javascript', ts: 'text/typescript',
-		json: 'application/json', md: 'text/markdown', txt: 'text/plain',
-		svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg',
-		jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif',
-	};
-	return map[ext] || 'text/plain';
-}
+/** @typedef {import('../lib/types.js').FileEntry} FileEntry */
 
 /**
  * @param {{
@@ -62,14 +49,6 @@ export default function FileList({ files, activeIndex, onSelect, onAdd, onDelete
 		});
 	}
 
-	function iconForFile(name) {
-		const ext = name.split('.').pop()?.toLowerCase() ?? '';
-		if (['html', 'htm', 'js', 'mjs', 'css', 'ts'].includes(ext)) return 'file-code';
-		if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'avif'].includes(ext)) return 'image';
-		if (ext === 'md') return 'markdown';
-		return 'file';
-	}
-
 	function commitEdit() {
 		if (!editing) return;
 		const name = editing.value.trim();
@@ -79,7 +58,8 @@ export default function FileList({ files, activeIndex, onSelect, onAdd, onDelete
 			}
 		} else {
 			if (name) {
-				onAdd([{ name, type: guessType(name), content: new Uint8Array(0) }]);
+				// New blank files default to text so they open in the editor, not the binary notice.
+				onAdd([{ name, type: guessType(name, 'text/plain'), content: new Uint8Array(0) }]);
 			}
 		}
 		setEditing(null);
