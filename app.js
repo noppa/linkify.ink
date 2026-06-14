@@ -1,4 +1,3 @@
-// @ts-check
 import { h, render } from './libraries.bundle.js';
 import { useState, useEffect } from './libraries.bundle.js';
 import { htm } from './libraries.bundle.js';

@@ -1,4 +1,3 @@
-// @ts-check
 import { h } from '../libraries.bundle.js';
 import { useState, useEffect, useRef } from '../libraries.bundle.js';
 import { htm } from '../libraries.bundle.js';
@@ -7,7 +6,12 @@ import Editor from './Editor.js';
 import Preview from './Preview.js';
 import ShareModal from './ShareModal.js';
 import Icon from '../lib/icons.js';
-import { decode, peekEncryptionType, ENC_PASSWORD, ENC_ECDH } from '../lib/codec.js';
+import {
+	decode,
+	peekEncryptionType,
+	ENC_PASSWORD,
+	ENC_ECDH,
+} from '../lib/codec.js';
 import { guessType } from '../lib/filetypes.js';
 import { downloadFiles } from '../lib/download.js';
 import { takePendingFiles } from '../lib/transfer.js';
@@ -44,7 +48,9 @@ export default function EditorPage() {
 	const [showShare, setShowShare] = useState(false);
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 	const [hashError, setHashError] = useState('');
-	const [hashPending, setHashPending] = useState(/** @type {string | null} */ (null));
+	const [hashPending, setHashPending] = useState(
+		/** @type {string | null} */ (null),
+	);
 	const [hashPassword, setHashPassword] = useState('');
 	const [hashLoading, setHashLoading] = useState(false);
 
@@ -73,10 +79,19 @@ export default function EditorPage() {
 		window.history.replaceState(null, '', window.location.pathname);
 		decode(hash)
 			.then(({ files: decoded }) => {
-				setFiles(decoded.map((f) => ({ name: f.name, type: guessType(f.name), content: f.data })));
+				setFiles(
+					decoded.map((f) => ({
+						name: f.name,
+						type: guessType(f.name),
+						content: f.data,
+					})),
+				);
 				setActiveIndex(0);
 			})
-			.catch((e) => { console.error(e); setHashError(e instanceof Error ? e.message : String(e)); });
+			.catch((e) => {
+				console.error(e);
+				setHashError(e instanceof Error ? e.message : String(e));
+			});
 	}, []);
 
 	// Keyboard shortcut Cmd/Ctrl+Shift+S → share
@@ -127,8 +142,16 @@ export default function EditorPage() {
 		setHashLoading(true);
 		setHashError('');
 		try {
-			const { files: decoded } = await decode(hashPending, { password: hashPassword });
-			setFiles(decoded.map((f) => ({ name: f.name, type: guessType(f.name), content: f.data })));
+			const { files: decoded } = await decode(hashPending, {
+				password: hashPassword,
+			});
+			setFiles(
+				decoded.map((f) => ({
+					name: f.name,
+					type: guessType(f.name),
+					content: f.data,
+				})),
+			);
 			setActiveIndex(0);
 			setHashPending(null);
 			setHashPassword('');
@@ -172,7 +195,9 @@ export default function EditorPage() {
 	function renameFile(index, newName) {
 		dirty.current = true;
 		setFiles((prev) =>
-			prev.map((f, i) => (i === index ? { ...f, name: newName, type: guessType(newName) } : f)),
+			prev.map((f, i) =>
+				i === index ? { ...f, name: newName, type: guessType(newName) } : f,
+			),
 		);
 	}
 
@@ -205,10 +230,13 @@ export default function EditorPage() {
 				</div>
 			</div>
 
-			${hashError && html`
+			${hashError &&
+			html`
 				<div class="hash-error-bar">
 					<${Icon} name="info" /> Failed to open shared link: ${hashError}
-					<button class="hash-error-close" onClick=${() => setHashError('')}><${Icon} name="x" /></button>
+					<button class="hash-error-close" onClick=${() => setHashError('')}>
+						<${Icon} name="x" />
+					</button>
 				</div>
 			`}
 
@@ -245,11 +273,13 @@ export default function EditorPage() {
 			html`
 				<${ShareModal} files=${files} onClose=${() => setShowShare(false)} />
 			`}
-
-			${hashPending && html`
+			${hashPending &&
+			html`
 				<div class="modal-backdrop">
 					<div class="modal">
-						<div class="modal-title"><${Icon} name="lock" /> Password protected</div>
+						<div class="modal-title">
+							<${Icon} name="lock" /> Password protected
+						</div>
 						<div class="modal-row">
 							<label>Password</label>
 							<input
@@ -260,12 +290,24 @@ export default function EditorPage() {
 								autofocus
 							/>
 						</div>
-						${hashError && html`<div class="modal-row modal-error">${hashError}</div>`}
+						${hashError &&
+						html`<div class="modal-row modal-error">${hashError}</div>`}
 						<div class="modal-actions">
-							<button class="btn" onClick=${() => { setHashPending(null); setHashPassword(''); setHashError(''); }}>
+							<button
+								class="btn"
+								onClick=${() => {
+									setHashPending(null);
+									setHashPassword('');
+									setHashError('');
+								}}
+							>
 								Cancel
 							</button>
-							<button class="btn btn-primary" onClick=${decodeWithPassword} disabled=${hashLoading}>
+							<button
+								class="btn btn-primary"
+								onClick=${decodeWithPassword}
+								disabled=${hashLoading}
+							>
 								${hashLoading ? 'Decrypting…' : 'Open'}
 							</button>
 						</div>

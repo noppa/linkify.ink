@@ -1,9 +1,13 @@
-// @ts-check
 import { h } from '../libraries.bundle.js';
 import { useState, useEffect } from '../libraries.bundle.js';
 import { htm } from '../libraries.bundle.js';
 import Icon from '../lib/icons.js';
-import { decode, peekEncryptionType, ENC_PASSWORD, ENC_ECDH } from '../lib/codec.js';
+import {
+	decode,
+	peekEncryptionType,
+	ENC_PASSWORD,
+	ENC_ECDH,
+} from '../lib/codec.js';
 import { encode as b64encode } from '../lib/base64url.js';
 import { generateEcdhKeypair, exportPublicKey } from '../lib/crypto.js';
 import { guessType } from '../lib/filetypes.js';
@@ -24,7 +28,9 @@ export default function ReceivePage() {
 	const [loading, setLoading] = useState(false);
 
 	const [ecdhPublicKey, setEcdhPublicKey] = useState('');
-	const [ecdhPrivateKey, setEcdhPrivateKey] = useState(/** @type {CryptoKey | null} */ (null));
+	const [ecdhPrivateKey, setEcdhPrivateKey] = useState(
+		/** @type {CryptoKey | null} */ (null),
+	);
 	const [keyCopied, setKeyCopied] = useState(false);
 
 	// Restore or generate ECDH keypair, persisted in sessionStorage so same-tab navigations preserve it.
@@ -37,22 +43,32 @@ export default function ReceivePage() {
 				if (stored) {
 					const { privateKeyJwk, publicKeyRaw } = JSON.parse(stored);
 					const pk = await crypto.subtle.importKey(
-						'jwk', privateKeyJwk,
-						{ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveKey'],
+						'jwk',
+						privateKeyJwk,
+						{ name: 'ECDH', namedCurve: 'P-256' },
+						true,
+						['deriveKey'],
 					);
 					setEcdhPrivateKey(pk);
 					setEcdhPublicKey(publicKeyRaw);
 					return;
 				}
-			} catch { /* fall through to generate */ }
+			} catch {
+				/* fall through to generate */
+			}
 
 			const { publicKey, privateKey } = await generateEcdhKeypair();
 			const rawPub = await exportPublicKey(publicKey);
 			const pubBase64 = b64encode(rawPub);
 			const jwk = await crypto.subtle.exportKey('jwk', privateKey);
 			try {
-				sessionStorage.setItem(SESSION_KEY, JSON.stringify({ privateKeyJwk: jwk, publicKeyRaw: pubBase64 }));
-			} catch { /* may fail in private mode */ }
+				sessionStorage.setItem(
+					SESSION_KEY,
+					JSON.stringify({ privateKeyJwk: jwk, publicKeyRaw: pubBase64 }),
+				);
+			} catch {
+				/* may fail in private mode */
+			}
 			setEcdhPublicKey(pubBase64);
 			setEcdhPrivateKey(privateKey);
 		}
@@ -71,7 +87,9 @@ export default function ReceivePage() {
 	// Warn before closing the tab while the keypair is active and no files have been received yet
 	useEffect(() => {
 		if (!ecdhPrivateKey || files) return;
-		function onBeforeUnload(e) { e.preventDefault(); }
+		function onBeforeUnload(e) {
+			e.preventDefault();
+		}
 		window.addEventListener('beforeunload', onBeforeUnload);
 		return () => window.removeEventListener('beforeunload', onBeforeUnload);
 	}, [ecdhPrivateKey, files]);
@@ -96,7 +114,10 @@ export default function ReceivePage() {
 	const detectedEncType = parsedHash ? peekEncryptionType(parsedHash) : null;
 
 	async function handleOpen() {
-		if (!parsedHash) { setError('Paste a valid link or hash'); return; }
+		if (!parsedHash) {
+			setError('Paste a valid link or hash');
+			return;
+		}
 
 		setLoading(true);
 		setError('');
@@ -105,23 +126,34 @@ export default function ReceivePage() {
 			/** @type {{ password?: string, privateKey?: CryptoKey }} */
 			const opts = {};
 			if (detectedEncType === ENC_ECDH) {
-				if (!ecdhPrivateKey) throw new Error('Keypair not ready — please wait a moment and try again');
+				if (!ecdhPrivateKey)
+					throw new Error(
+						'Keypair not ready — please wait a moment and try again',
+					);
 				opts.privateKey = ecdhPrivateKey;
 			} else if (detectedEncType === ENC_PASSWORD) {
-				if (!password) { setError('Enter the password'); setLoading(false); return; }
+				if (!password) {
+					setError('Enter the password');
+					setLoading(false);
+					return;
+				}
 				opts.password = password;
 			}
 			const result = await decode(parsedHash, opts);
-			setFiles(result.files.map((f) => ({
-				name: f.name,
-				type: guessType(f.name),
-				content: f.data,
-			})));
+			setFiles(
+				result.files.map((f) => ({
+					name: f.name,
+					type: guessType(f.name),
+					content: f.data,
+				})),
+			);
 		} catch (e) {
 			console.error(e);
 			const msg = e instanceof Error ? e.message : String(e);
 			if (detectedEncType === ENC_ECDH) {
-				setError('Decryption failed. The link may not have been encrypted with your public key.');
+				setError(
+					'Decryption failed. The link may not have been encrypted with your public key.',
+				);
 			} else if (detectedEncType === ENC_PASSWORD) {
 				setError('Decryption failed. Wrong password?');
 			} else {
@@ -149,8 +181,8 @@ export default function ReceivePage() {
 		setTimeout(() => setKeyCopied(false), 1500);
 	}
 
-	const openDisabled = loading || !pasteInput.trim()
-		|| (detectedEncType === 2 && !ecdhPrivateKey);
+	const openDisabled =
+		loading || !pasteInput.trim() || (detectedEncType === 2 && !ecdhPrivateKey);
 
 	return html`
 		<div class="receive-page">
@@ -159,42 +191,60 @@ export default function ReceivePage() {
 				linkify.ink
 			</a>
 
-			${!files && html`
+			${!files &&
+			html`
 				<div class="receive-card">
-					<div class="receive-section-title"><${Icon} name="lock" /> Your public key</div>
+					<div class="receive-section-title">
+						<${Icon} name="lock" /> Your public key
+					</div>
 					<p class="receive-hint">
-						Copy this key and share it with the sender. They'll use it in the Share dialog to encrypt files exclusively for you.${' '}
-						<strong>Do not close this tab</strong> — your private key exists only in this browser session.
+						Copy this key and share it with the sender. They'll use it in the
+						Share dialog to encrypt files exclusively for you.${' '}
+						<strong>Do not close this tab</strong> — your private key exists
+						only in this browser session.
 					</p>
 					${ecdhPublicKey
 						? html`
-							<div class="receive-pubkey">${ecdhPublicKey}</div>
-							<button class="btn" onClick=${copyKey}>
-								<${Icon} name=${keyCopied ? 'check' : 'copy'} />
-								${keyCopied ? 'Copied!' : 'Copy public key'}
-							</button>
-						`
-						: html`<p class="receive-hint">Generating keypair…</p>`
-					}
+								<div class="receive-pubkey">${ecdhPublicKey}</div>
+								<button class="btn" onClick=${copyKey}>
+									<${Icon} name=${keyCopied ? 'check' : 'copy'} />
+									${keyCopied ? 'Copied!' : 'Copy public key'}
+								</button>
+							`
+						: html`<p class="receive-hint">Generating keypair…</p>`}
 
 					<div class="receive-divider"></div>
 
-					<div class="receive-section-title"><${Icon} name="download" /> Open a shared link</div>
-					<p class="receive-hint">Paste a link from the sender. Works for all link types — unencrypted, password-protected, or encrypted with your public key above.</p>
+					<div class="receive-section-title">
+						<${Icon} name="download" /> Open a shared link
+					</div>
+					<p class="receive-hint">
+						Paste a link from the sender. Works for all link types —
+						unencrypted, password-protected, or encrypted with your public key
+						above.
+					</p>
 					<textarea
 						class="modal-textarea"
 						value=${pasteInput}
-						onInput=${(e) => { setPasteInput(/** @type {HTMLTextAreaElement} */ (e.target).value); setError(''); setPassword(''); }}
+						onInput=${(e) => {
+							setPasteInput(
+								/** @type {HTMLTextAreaElement} */ (e.target).value,
+							);
+							setError('');
+							setPassword('');
+						}}
 						placeholder="https://linkify.ink/#..."
 						rows="3"
 					></textarea>
-					${detectedEncType === ENC_PASSWORD && html`
+					${detectedEncType === ENC_PASSWORD &&
+					html`
 						<div class="modal-row">
 							<label>Password</label>
 							<input
 								type="password"
 								value=${password}
-								onInput=${(e) => setPassword(/** @type {HTMLInputElement} */ (e.target).value)}
+								onInput=${(e) =>
+									setPassword(/** @type {HTMLInputElement} */ (e.target).value)}
 								onKeyDown=${(e) => e.key === 'Enter' && handleOpen()}
 								autofocus
 							/>
@@ -212,18 +262,24 @@ export default function ReceivePage() {
 					</div>
 				</div>
 			`}
-
-			${files && html`
+			${files &&
+			html`
 				<div class="receive-card">
-					<div class="receive-section-title">${files.length} file${files.length !== 1 ? 's' : ''} received</div>
+					<div class="receive-section-title">
+						${files.length} file${files.length !== 1 ? 's' : ''} received
+					</div>
 					<ul class="receive-file-list">
-						${files.map((f) => html`
-							<li>
-								<${Icon} name="file" />
-								<span>${f.name}</span>
-								<span class="receive-file-size">${humanSize(f.content.length)}</span>
-							</li>
-						`)}
+						${files.map(
+							(f) => html`
+								<li>
+									<${Icon} name="file" />
+									<span>${f.name}</span>
+									<span class="receive-file-size"
+										>${humanSize(f.content.length)}</span
+									>
+								</li>
+							`,
+						)}
 					</ul>
 					<div class="modal-actions" style="justify-content:flex-start">
 						<button class="btn" onClick=${downloadAll}>

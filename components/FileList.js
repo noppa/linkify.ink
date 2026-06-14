@@ -1,4 +1,3 @@
-// @ts-check
 import { h } from '../libraries.bundle.js';
 import { useRef, useState } from '../libraries.bundle.js';
 import { htm } from '../libraries.bundle.js';
@@ -21,7 +20,16 @@ const html = htm.bind(h);
  *   onToggleCollapse: () => void,
  * }} props
  */
-export default function FileList({ files, activeIndex, onSelect, onAdd, onDelete, onRename, collapsed, onToggleCollapse }) {
+export default function FileList({
+	files,
+	activeIndex,
+	onSelect,
+	onAdd,
+	onDelete,
+	onRename,
+	collapsed,
+	onToggleCollapse,
+}) {
 	const uploadRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
 	/** @type {[{ mode: 'rename', index: number, value: string } | { mode: 'create', value: string } | null, Function]} */
@@ -59,22 +67,38 @@ export default function FileList({ files, activeIndex, onSelect, onAdd, onDelete
 		} else {
 			if (name) {
 				// New blank files default to text so they open in the editor, not the binary notice.
-				onAdd([{ name, type: guessType(name, 'text/plain'), content: new Uint8Array(0) }]);
+				onAdd([
+					{
+						name,
+						type: guessType(name, 'text/plain'),
+						content: new Uint8Array(0),
+					},
+				]);
 			}
 		}
 		setEditing(null);
 	}
 
 	function handleEditKey(e) {
-		if (e.key === 'Enter') { e.preventDefault(); commitEdit(); }
-		if (e.key === 'Escape') { e.preventDefault(); setEditing(null); }
+		if (e.key === 'Enter') {
+			e.preventDefault();
+			commitEdit();
+		}
+		if (e.key === 'Escape') {
+			e.preventDefault();
+			setEditing(null);
+		}
 	}
 
 	return html`
 		<aside class="sidebar ${collapsed ? 'collapsed' : ''}">
 			<div class="sidebar-header">
 				<span class="sidebar-title">Files</span>
-				<button class="btn btn-icon" aria-label="Toggle sidebar" onClick=${onToggleCollapse}>
+				<button
+					class="btn btn-icon"
+					aria-label="Toggle sidebar"
+					onClick=${onToggleCollapse}
+				>
 					<${Icon} name=${collapsed ? 'sidebar-expand' : 'sidebar-collapse'} />
 				</button>
 			</div>
@@ -90,44 +114,60 @@ export default function FileList({ files, activeIndex, onSelect, onAdd, onDelete
 							<${Icon} name=${iconForFile(f.name)} />
 							${isRenaming
 								? html`<input
-									class="file-item-rename-input"
-									autoFocus
-									value=${editing.value}
-									onInput=${(e) => setEditing((prev) => ({ ...prev, value: e.target.value }))}
-									onKeyDown=${handleEditKey}
-									onBlur=${commitEdit}
-								/>`
+										class="file-item-rename-input"
+										autofocus
+										value=${editing.value}
+										onInput=${(e) =>
+											setEditing((prev) => ({
+												...prev,
+												value: e.target.value,
+											}))}
+										onKeyDown=${handleEditKey}
+										onBlur=${commitEdit}
+									/>`
 								: html`<span
-									class="file-item-name"
-									onDblClick=${(e) => { e.stopPropagation(); setEditing({ mode: 'rename', index: i, value: f.name }); }}
-								>${f.name}</span>`
-							}
-							${!isRenaming && html`<button
+										class="file-item-name"
+										onDblClick=${(e) => {
+											e.stopPropagation();
+											setEditing({ mode: 'rename', index: i, value: f.name });
+										}}
+										>${f.name}</span
+									>`}
+							${!isRenaming &&
+							html`<button
 								class="file-item-action"
 								aria-label="Rename file"
-								onClick=${(e) => { e.stopPropagation(); setEditing({ mode: 'rename', index: i, value: f.name }); }}
+								onClick=${(e) => {
+									e.stopPropagation();
+									setEditing({ mode: 'rename', index: i, value: f.name });
+								}}
 							>
 								<${Icon} name="pencil" />
 							</button>`}
 							<button
 								class="file-item-action"
 								aria-label="Delete file"
-								onClick=${(e) => { e.stopPropagation(); onDelete(i); }}
+								onClick=${(e) => {
+									e.stopPropagation();
+									onDelete(i);
+								}}
 							>
 								<${Icon} name="x" />
 							</button>
 						</li>
 					`;
 				})}
-				${editing?.mode === 'create' && html`
+				${editing?.mode === 'create' &&
+				html`
 					<li class="file-item">
 						<${Icon} name="file" />
 						<input
 							class="file-item-rename-input"
-							autoFocus
+							autofocus
 							value=${editing.value}
 							placeholder="filename.txt"
-							onInput=${(e) => setEditing((prev) => ({ ...prev, value: e.target.value }))}
+							onInput=${(e) =>
+								setEditing((prev) => ({ ...prev, value: e.target.value }))}
 							onKeyDown=${handleEditKey}
 							onBlur=${commitEdit}
 						/>
@@ -135,10 +175,16 @@ export default function FileList({ files, activeIndex, onSelect, onAdd, onDelete
 				`}
 			</ul>
 			<div class="add-file">
-				<button class="add-file-btn" onClick=${() => setEditing({ mode: 'create', value: '' })}>
+				<button
+					class="add-file-btn"
+					onClick=${() => setEditing({ mode: 'create', value: '' })}
+				>
 					<${Icon} name="plus" /> new
 				</button>
-				<button class="add-file-btn" onClick=${() => uploadRef.current?.click()}>
+				<button
+					class="add-file-btn"
+					onClick=${() => uploadRef.current?.click()}
+				>
 					<${Icon} name="upload" /> upload
 				</button>
 				<input

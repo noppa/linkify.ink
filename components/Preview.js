@@ -1,4 +1,3 @@
-// @ts-check
 import { h } from '../libraries.bundle.js';
 import { useEffect, useRef } from '../libraries.bundle.js';
 import { htm } from '../libraries.bundle.js';
@@ -53,10 +52,20 @@ export default function Preview({ files, activeFile }) {
 		function renderPreview() {
 			const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
 			if (ext === 'md') {
-				const rendered = /** @type {string} */ (marked.parse(new TextDecoder().decode(file.content)));
-				showBlob(`<html><body style="font-family:sans-serif;padding:16px;max-width:720px">${rendered}</body></html>`);
-			} else if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'svg'].includes(ext)) {
-				const url = URL.createObjectURL(new Blob([file.content], { type: file.type || guessType(file.name, 'image/png') }));
+				const rendered = /** @type {string} */ (
+					marked.parse(new TextDecoder().decode(file.content))
+				);
+				showBlob(
+					`<html><body style="font-family:sans-serif;padding:16px;max-width:720px">${rendered}</body></html>`,
+				);
+			} else if (
+				['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'svg'].includes(ext)
+			) {
+				const url = URL.createObjectURL(
+					new Blob([file.content], {
+						type: file.type || guessType(file.name, 'image/png'),
+					}),
+				);
 				blobUrlRef.current = url;
 				iframe.src = url;
 			} else if (ext === 'html' || ext === 'htm') {
@@ -68,7 +77,9 @@ export default function Preview({ files, activeFile }) {
 				}
 			} else {
 				const text = escapeHtml(new TextDecoder().decode(file.content));
-				showBlob(`<pre style="margin:0;padding:10px;font-family:monospace;white-space:pre-wrap">${text}</pre>`);
+				showBlob(
+					`<pre style="margin:0;padding:10px;font-family:monospace;white-space:pre-wrap">${text}</pre>`,
+				);
 			}
 		}
 
@@ -82,18 +93,25 @@ export default function Preview({ files, activeFile }) {
 	}, [activeFile, files]);
 
 	const isHtml = activeFile
-		? ['html', 'htm'].includes(activeFile.name.split('.').pop()?.toLowerCase() ?? '')
+		? ['html', 'htm'].includes(
+				activeFile.name.split('.').pop()?.toLowerCase() ?? '',
+			)
 		: false;
 
 	return html`
 		<div class="panel preview-panel">
 			<div class="panel-header">
-				<${Icon} name="eye" /> preview${activeFile ? ` — ${activeFile.name}` : ''}
+				<${Icon} name="eye" /> preview${activeFile
+					? ` — ${activeFile.name}`
+					: ''}
 			</div>
-			${!isHosted && isHtml && html`
+			${!isHosted &&
+			isHtml &&
+			html`
 				<div class="preview-notice">
 					<${Icon} name="info" />
-					Full HTML preview (with relative imports) requires the hosted version at linkify.ink.
+					Full HTML preview (with relative imports) requires the hosted version
+					at linkify.ink.
 				</div>
 			`}
 			<iframe

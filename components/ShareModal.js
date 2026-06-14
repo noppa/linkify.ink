@@ -1,4 +1,3 @@
-// @ts-check
 import { h, Fragment } from '../libraries.bundle.js';
 import { useState } from '../libraries.bundle.js';
 import { htm } from '../libraries.bundle.js';
@@ -61,9 +60,8 @@ export default function ShareModal({ files, onClose }) {
 
 	// For ECDH, share only the hash fragment — the receiver pastes it into /receive directly,
 	// and opening the full URL would generate a new keypair that can't decrypt the payload.
-	const shareValue = url && encryption === 'ecdh'
-		? url.slice(url.indexOf('#'))
-		: url;
+	const shareValue =
+		url && encryption === 'ecdh' ? url.slice(url.indexOf('#')) : url;
 
 	async function copyUrl() {
 		await navigator.clipboard.writeText(shareValue);
@@ -153,7 +151,9 @@ export default function ShareModal({ files, onClose }) {
 						<label>
 							${encryption === 'ecdh' ? 'Encrypted payload' : 'Your link'}
 							${shareLen > 0
-								? html`<span class="modal-url-length">${shareLen.toLocaleString()} chars</span>`
+								? html`<span class="modal-url-length"
+										>${shareLen.toLocaleString()} chars</span
+									>`
 								: ''}
 						</label>
 						<div class="modal-url">${shareValue}</div>

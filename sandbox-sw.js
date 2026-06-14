@@ -1,4 +1,3 @@
-// @ts-check
 // Service worker for *.sandbox.linkify.ink — serves files from in-memory map
 
 /** @type {Map<string, Uint8Array>} */
@@ -42,12 +41,24 @@ function mimeFor(path) {
 	const ext = path.split('.').pop()?.toLowerCase() ?? '';
 	/** @type {Record<string, string>} */
 	const map = {
-		html: 'text/html', htm: 'text/html', css: 'text/css',
-		js: 'text/javascript', mjs: 'text/javascript',
-		json: 'application/json', md: 'text/markdown', txt: 'text/plain',
-		svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg',
-		jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif',
-		woff: 'font/woff', woff2: 'font/woff2', ico: 'image/x-icon',
+		html: 'text/html',
+		htm: 'text/html',
+		css: 'text/css',
+		js: 'text/javascript',
+		mjs: 'text/javascript',
+		json: 'application/json',
+		md: 'text/markdown',
+		txt: 'text/plain',
+		svg: 'image/svg+xml',
+		png: 'image/png',
+		jpg: 'image/jpeg',
+		jpeg: 'image/jpeg',
+		gif: 'image/gif',
+		webp: 'image/webp',
+		avif: 'image/avif',
+		woff: 'font/woff',
+		woff2: 'font/woff2',
+		ico: 'image/x-icon',
 	};
 	return map[ext] ?? 'application/octet-stream';
 }

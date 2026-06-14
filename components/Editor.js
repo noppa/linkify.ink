@@ -1,4 +1,3 @@
-// @ts-check
 import { h } from '../libraries.bundle.js';
 import { useState, useEffect } from '../libraries.bundle.js';
 import { htm } from '../libraries.bundle.js';
@@ -20,9 +19,7 @@ export default function Editor({ file, onChange, onReplace }) {
 	if (!file) {
 		return html`
 			<div class="panel editor-panel">
-				<div class="panel-header">
-					<${Icon} name="code" /> editor
-				</div>
+				<div class="panel-header"><${Icon} name="code" /> editor</div>
 				<div class="editor-body editor-empty">
 					<p>Add a file to start editing.</p>
 				</div>
@@ -45,9 +42,7 @@ export default function Editor({ file, onChange, onReplace }) {
 
 	return html`
 		<div class="panel editor-panel">
-			<div class="panel-header">
-				<${Icon} name="code" /> ${file.name}
-			</div>
+			<div class="panel-header"><${Icon} name="code" /> ${file.name}</div>
 			<div class="editor-body">
 				${isText
 					? html`<textarea
@@ -56,8 +51,9 @@ export default function Editor({ file, onChange, onReplace }) {
 							onInput=${handleInput}
 							spellcheck=${false}
 						></textarea>`
-					: html`<div class="editor-binary-notice">Binary file — not editable as text</div>`
-				}
+					: html`<div class="editor-binary-notice">
+							Binary file — not editable as text
+						</div>`}
 			</div>
 		</div>
 	`;
@@ -77,7 +73,8 @@ function ImageViewer({ file, onReplace }) {
 	useEffect(() => {
 		// Feature-detect AVIF encoding support
 		const canvas = document.createElement('canvas');
-		canvas.width = 1; canvas.height = 1;
+		canvas.width = 1;
+		canvas.height = 1;
 		canvas.toBlob((blob) => setAvifSupported(!!blob), 'image/avif');
 	}, []);
 
@@ -103,19 +100,30 @@ function ImageViewer({ file, onReplace }) {
 
 	return html`
 		<div class="panel editor-panel">
-			<div class="panel-header">
-				<${Icon} name="image" /> ${file.name}
-			</div>
+			<div class="panel-header"><${Icon} name="image" /> ${file.name}</div>
 			<div class="editor-image-viewer">
-				${blobUrl && html`<img src=${blobUrl} alt=${file.name} class="editor-image" />`}
-				${onReplace && html`
+				${blobUrl &&
+				html`<img src=${blobUrl} alt=${file.name} class="editor-image" />`}
+				${onReplace &&
+				html`
 					<div class="editor-image-actions">
-						<span class="editor-image-hint">Lossy recompression (renames file):</span>
-						<button class="btn" onClick=${() => convert('image/webp')} disabled=${converting}>
+						<span class="editor-image-hint"
+							>Lossy recompression (renames file):</span
+						>
+						<button
+							class="btn"
+							onClick=${() => convert('image/webp')}
+							disabled=${converting}
+						>
 							${converting ? 'Converting…' : 'Convert to WebP'}
 						</button>
-						${avifSupported && html`
-							<button class="btn" onClick=${() => convert('image/avif')} disabled=${converting}>
+						${avifSupported &&
+						html`
+							<button
+								class="btn"
+								onClick=${() => convert('image/avif')}
+								disabled=${converting}
+							>
 								Convert to AVIF
 							</button>
 						`}
@@ -143,25 +151,41 @@ async function recompress(file, format) {
 			canvas.width = img.naturalWidth;
 			canvas.height = img.naturalHeight;
 			const ctx = canvas.getContext('2d');
-			if (!ctx) { URL.revokeObjectURL(url); resolve(null); return; }
-			ctx.drawImage(img, 0, 0);
-			canvas.toBlob((result) => {
+			if (!ctx) {
 				URL.revokeObjectURL(url);
-				if (!result) { resolve(null); return; }
-				const ext = format === 'image/avif' ? 'avif' : 'webp';
-				const name = file.name.replace(/\.[^.]+$/, '') + '.' + ext;
-				const reader = new FileReader();
-				reader.onload = () => {
-					resolve({
-						name,
-						type: format,
-						content: new Uint8Array(/** @type {ArrayBuffer} */ (reader.result)),
-					});
-				};
-				reader.readAsArrayBuffer(result);
-			}, format, 0.85);
+				resolve(null);
+				return;
+			}
+			ctx.drawImage(img, 0, 0);
+			canvas.toBlob(
+				(result) => {
+					URL.revokeObjectURL(url);
+					if (!result) {
+						resolve(null);
+						return;
+					}
+					const ext = format === 'image/avif' ? 'avif' : 'webp';
+					const name = file.name.replace(/\.[^.]+$/, '') + '.' + ext;
+					const reader = new FileReader();
+					reader.onload = () => {
+						resolve({
+							name,
+							type: format,
+							content: new Uint8Array(
+								/** @type {ArrayBuffer} */ (reader.result),
+							),
+						});
+					};
+					reader.readAsArrayBuffer(result);
+				},
+				format,
+				0.85,
+			);
 		};
-		img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+		img.onerror = () => {
+			URL.revokeObjectURL(url);
+			resolve(null);
+		};
 		img.src = url;
 	});
 }
