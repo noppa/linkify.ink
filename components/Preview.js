@@ -26,8 +26,10 @@ export default function Preview({ files, activeFile }) {
 	const sandboxCleanupRef = useRef(/** @type {(() => void) | null} */ (null));
 
 	useEffect(() => {
+		if (!activeFile || !iframeRef.current) return;
+		// Declared (non-null) type so the nested helpers below keep the narrowing.
+		/** @type {HTMLIFrameElement} */
 		const iframe = iframeRef.current;
-		if (!activeFile || !iframe) return;
 		const file = activeFile;
 
 		// Revoke the current blob URL / tear down the current sandbox listener.

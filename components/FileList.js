@@ -37,8 +37,10 @@ export default function FileList({
 }) {
 	const uploadRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
-	/** @type {[{ mode: 'rename', index: number, value: string } | { mode: 'create', value: string } | null, Function]} */
-	const [editing, setEditing] = useState(null);
+	/** @typedef {{ mode: 'rename', index: number, value: string } | { mode: 'create', value: string }} EditingState */
+	const [editing, setEditing] = useState(
+		/** @type {EditingState | null} */ (null),
+	);
 
 	function handleFileInput(e) {
 		const input = /** @type {HTMLInputElement} */ (e.target);
@@ -137,10 +139,9 @@ export default function FileList({
 										autofocus
 										value=${editing.value}
 										onInput=${(e) =>
-											setEditing((prev) => ({
-												...prev,
-												value: e.target.value,
-											}))}
+											setEditing((prev) =>
+												prev ? { ...prev, value: e.target.value } : prev,
+											)}
 										onKeyDown=${handleEditKey}
 										onBlur=${commitEdit}
 									/>`
@@ -186,7 +187,9 @@ export default function FileList({
 							value=${editing.value}
 							placeholder="filename.txt"
 							onInput=${(e) =>
-								setEditing((prev) => ({ ...prev, value: e.target.value }))}
+								setEditing((prev) =>
+									prev ? { ...prev, value: e.target.value } : prev,
+								)}
 							onKeyDown=${handleEditKey}
 							onBlur=${commitEdit}
 						/>
