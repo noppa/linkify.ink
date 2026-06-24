@@ -10,7 +10,10 @@
 	</head>
 	<body>
 		<script>
-			const PARENT_ORIGIN = 'https://linkify.ink';
+			// Local dev passes ?parent=<editor origin>; hosted falls back to linkify.ink.
+			const PARENT_ORIGIN =
+				new URLSearchParams(location.search).get('parent') ||
+				'https://linkify.ink';
 			let pendingEntry = 'index.html';
 
 			async function init() {

@@ -5,3 +5,14 @@ compatibility_date = "2025-01-01"
 [[routes]]
 pattern = "*.sandbox.linkify.ink/*"
 zone_name = "linkify.ink"
+
+# Import sandbox-loader.html and sandbox-sw.js as text modules. The Text rule is
+# listed first so sandbox-sw.js is bundled as a string; the ESModule rule (matched
+# afterwards) keeps sandbox-worker.js itself a normal module.
+[[rules]]
+type = "Text"
+globs = ["sandbox-loader.html", "sandbox-sw.js"]
+
+[[rules]]
+type = "ESModule"
+globs = ["**/*.js", "**/*.mjs"]

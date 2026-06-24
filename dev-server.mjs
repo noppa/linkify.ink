@@ -40,7 +40,11 @@ function getContentType(extname) {
 let lastUpdatedAt = Date.now();
 const requestedRelativePaths = new Set(['index.html']);
 
-const port = process.env.PORT || 8080;
+const port = Number(process.env.PORT) || 8080;
+// The sandbox preview is served on its own port so it's a distinct origin from the
+// editor (mirrors *.sandbox.linkify.ink in production). Different port = different
+// origin, so the preview's service worker can't hijack the editor.
+const sandboxPort = Number(process.env.SANDBOX_PORT) || port + 1;
 const updateInterval = process.env.UPDATE_INTERVAL || 5000;
 
 const updaterScript = `
@@ -59,6 +63,51 @@ async function checkUpdates() {
 }
 setTimeout(checkUpdates, ${updateInterval});
 `;
+
+/**
+ * Local mirror of the *.sandbox.linkify.ink Cloudflare worker, served on its own
+ * port (sandboxPort). Serves the loader at / and the service worker at
+ * /sandbox-sw.js; everything else is a preview file the service worker handles.
+ * @param {http.IncomingMessage} request
+ * @param {http.ServerResponse} response
+ */
+async function serveSandbox(request, response) {
+	const pathOnly = (request.url || '/').split('?')[0];
+
+	if (pathOnly === '/sandbox-sw.js') {
+		const sw = await fs.promises.readFile(
+			path.join(import.meta.dirname, 'sandbox-sw.js'),
+		);
+		response.writeHead(200, {
+			...baseHeaders,
+			'Content-Type': getContentType('.js'),
+			'Service-Worker-Allowed': '/',
+		});
+		response.end(sw);
+		return;
+	}
+
+	if (pathOnly === '/' || pathOnly === '') {
+		const loader = await fs.promises.readFile(
+			path.join(import.meta.dirname, 'sandbox-loader.html'),
+		);
+		response.writeHead(200, {
+			...baseHeaders,
+			'Content-Type': getContentType('.html'),
+		});
+		response.end(loader);
+		return;
+	}
+
+	// Everything else on the sandbox origin is a preview file served by the SW.
+	// If a request reaches the network it means the SW didn't have it — 404 rather
+	// than leaking the editor's own files onto the sandbox origin.
+	response.writeHead(404, {
+		...baseHeaders,
+		'Content-Type': getContentType('.txt'),
+	});
+	response.end('Not found (sandbox)');
+}
 
 http
 	.createServer(async function (request, response) {
@@ -157,6 +206,19 @@ http
 	})
 	.listen(port);
 
+// Dedicated sandbox-preview server on its own port (distinct origin from the editor).
+http
+	.createServer(async function (request, response) {
+		try {
+			await serveSandbox(request, response);
+		} catch (error) {
+			console.error(error);
+			response.writeHead(500);
+			response.end('Internal server error');
+		}
+	})
+	.listen(sandboxPort);
+
 async function getIndexHtml() {
 	const contents = await fs.promises.readFile(
 		path.join(import.meta.dirname, './index.html'),
@@ -170,3 +232,4 @@ async function getIndexHtml() {
 }
 
 console.log(`Listening in http://localhost:${port}`);
+console.log(`Sandbox preview on http://localhost:${sandboxPort}`);

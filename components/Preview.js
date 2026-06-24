@@ -71,12 +71,7 @@ export default function Preview({ files, activeFile }) {
 				blobUrlRef.current = url;
 				iframe.src = url;
 			} else if (ext === 'html' || ext === 'htm') {
-				if (isHosted) {
-					sandboxCleanupRef.current = setupSandboxIframe(iframe, files, file);
-				} else {
-					// Blob URL fallback for local dev (relative imports won't resolve)
-					showBlob(new TextDecoder().decode(file.content));
-				}
+				sandboxCleanupRef.current = setupSandboxIframe(iframe, files, file);
 			} else {
 				const text = escapeHtml(new TextDecoder().decode(file.content));
 				showBlob(
@@ -94,12 +89,6 @@ export default function Preview({ files, activeFile }) {
 		};
 	}, [activeFile, files]);
 
-	const isHtml = activeFile
-		? ['html', 'htm'].includes(
-				activeFile.name.split('.').pop()?.toLowerCase() ?? '',
-			)
-		: false;
-
 	return html`
 		<div class="panel preview-panel">
 			<div class="panel-header">
@@ -107,15 +96,6 @@ export default function Preview({ files, activeFile }) {
 					? ` — ${activeFile.name}`
 					: ''}
 			</div>
-			${!isHosted &&
-			isHtml &&
-			html`
-				<div class="preview-notice">
-					<${Icon} name="info" />
-					Full HTML preview (with relative imports) requires the hosted version
-					at linkify.ink.
-				</div>
-			`}
 			<iframe
 				ref=${iframeRef}
 				class="preview-iframe"
@@ -135,8 +115,11 @@ export default function Preview({ files, activeFile }) {
  * @returns {() => void}
  */
 function setupSandboxIframe(iframe, files, mainFile) {
-	const uuid = crypto.randomUUID();
-	const sandboxOrigin = `https://${uuid}.${SANDBOX_BASE}`;
+	// Local dev: the sandbox runs on editor port + 1 (see dev-server.mjs), a distinct
+	// origin so its service worker can't hijack the editor.
+	const sandboxOrigin = isHosted
+		? `https://${crypto.randomUUID()}.${SANDBOX_BASE}`
+		: `${location.protocol}//${location.hostname}:${Number(location.port) + 1}`;
 
 	/** @type {Record<string, Uint8Array>} */
 	const filesData = {};
@@ -156,7 +139,10 @@ function setupSandboxIframe(iframe, files, mainFile) {
 	}
 
 	window.addEventListener('message', onMessage);
-	iframe.src = sandboxOrigin + '/';
+	// Pass the editor origin so the loader knows who to trust (the hosted Cloudflare
+	// loader hardcodes it instead; the query param is for the local dev loader).
+	iframe.src =
+		sandboxOrigin + '/?parent=' + encodeURIComponent(location.origin);
 
 	return () => window.removeEventListener('message', onMessage);
 }
