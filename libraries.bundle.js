@@ -2600,7 +2600,7 @@ var Xt = g2.parseInline;
 var Vt = b2.parse;
 var Yt = x2.lex;
 
-// node_modules/@bokuweb/zstd-wasm/dist/web/index.web.js
+// node_modules/@bokuweb/zstd-wasm/dist/esm/index.web.js
 var index_web_exports = {};
 __export(index_web_exports, {
   compress: () => compress,
@@ -2614,7 +2614,7 @@ __export(index_web_exports, {
   init: () => init2
 });
 
-// node_modules/@bokuweb/zstd-wasm/dist/web/zstd.js
+// node_modules/@bokuweb/zstd-wasm/dist/esm/zstd.js
 var Module2 = typeof Module2 !== "undefined" ? Module2 : {};
 var moduleOverrides = {};
 var key;
@@ -2958,7 +2958,7 @@ if (Module2["preInit"]) {
 }
 Module2["init"] = init;
 
-// node_modules/@bokuweb/zstd-wasm/dist/web/module.js
+// node_modules/@bokuweb/zstd-wasm/dist/esm/module.js
 var __awaiter = function(thisArg, _arguments, P3, generator) {
   function adopt(value) {
     return value instanceof P3 ? value : new P3(function(resolve) {
@@ -2993,13 +2993,13 @@ var waitInitialized = () => __awaiter(void 0, void 0, void 0, function* () {
   yield initialized;
 });
 
-// node_modules/@bokuweb/zstd-wasm/dist/web/errors/index.js
+// node_modules/@bokuweb/zstd-wasm/dist/esm/errors/index.js
 var isError = (code) => {
   const _isError = Module2["_ZSTD_isError"];
   return _isError(code);
 };
 
-// node_modules/@bokuweb/zstd-wasm/dist/web/simple/decompress.js
+// node_modules/@bokuweb/zstd-wasm/dist/esm/simple/decompress.js
 var getFrameContentSize = (src, size) => {
   const getSize = Module2["_ZSTD_getFrameContentSize"];
   return getSize(src, size);
@@ -3029,7 +3029,7 @@ var decompress = (buf, opts = { defaultHeapSize: 1024 * 1024 }) => {
   }
 };
 
-// node_modules/@bokuweb/zstd-wasm/dist/web/simple/compress.js
+// node_modules/@bokuweb/zstd-wasm/dist/esm/simple/compress.js
 var compressBound = (size) => {
   const bound = Module2["_ZSTD_compressBound"];
   return bound(size);
@@ -3058,7 +3058,7 @@ var compress = (buf, level) => {
   }
 };
 
-// node_modules/@bokuweb/zstd-wasm/dist/web/simple/decompress_using_dict.js
+// node_modules/@bokuweb/zstd-wasm/dist/esm/simple/decompress_using_dict.js
 var getFrameContentSize2 = (src, size) => {
   const getSize = Module2["_ZSTD_getFrameContentSize"];
   return getSize(src, size);
@@ -3098,7 +3098,7 @@ var decompressUsingDict = (dctx, buf, dict, opts = { defaultHeapSize: 1024 * 102
   }
 };
 
-// node_modules/@bokuweb/zstd-wasm/dist/web/simple/compress_using_dict.js
+// node_modules/@bokuweb/zstd-wasm/dist/esm/simple/compress_using_dict.js
 var compressBound2 = (size) => {
   const bound = Module2["_ZSTD_compressBound"];
   return bound(size);
@@ -3137,7 +3137,7 @@ var compressUsingDict = (cctx, buf, dict, level) => {
   }
 };
 
-// node_modules/@bokuweb/zstd-wasm/dist/web/index.web.js
+// node_modules/@bokuweb/zstd-wasm/dist/esm/index.web.js
 var __awaiter2 = function(thisArg, _arguments, P3, generator) {
   function adopt(value) {
     return value instanceof P3 ? value : new P3(function(resolve) {
