@@ -158,7 +158,8 @@ html, body {
 }
 
 .sidebar.collapsed .file-list,
-.sidebar.collapsed .add-file {
+.sidebar.collapsed .add-file,
+.sidebar.collapsed .starter-row {
 	display: none;
 }
 
@@ -182,6 +183,39 @@ html, body {
 	letter-spacing: 0.05em;
 	color: var(--text-muted);
 	border-bottom: 1px solid var(--border);
+}
+
+.starter-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 10px;
+	border-bottom: 1px solid var(--border);
+}
+
+.starter-label {
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--text-muted);
+}
+
+.starter-select {
+	flex: 1;
+	min-width: 0;
+	background: var(--bg);
+	border: 1px solid var(--border);
+	color: inherit;
+	font-family: inherit;
+	font-size: 12px;
+	padding: 3px 4px;
+	border-radius: 4px;
+	cursor: pointer;
+}
+
+.starter-select:hover {
+	border-color: var(--accent);
 }
 
 .file-list {

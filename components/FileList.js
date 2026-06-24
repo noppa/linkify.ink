@@ -3,6 +3,7 @@ import { useRef, useState } from '../libraries.bundle.js';
 import { htm } from '../libraries.bundle.js';
 import Icon from '../lib/icons.js';
 import { guessType, iconForFile } from '../lib/filetypes.js';
+import { STARTERS } from '../lib/starters.js';
 
 const html = htm.bind(h);
 
@@ -16,6 +17,8 @@ const html = htm.bind(h);
  *   onAdd: (files: FileEntry[]) => void,
  *   onDelete: (i: number) => void,
  *   onRename: (i: number, newName: string) => void,
+ *   starter: string,
+ *   onApplyStarter: (key: string) => void,
  *   collapsed: boolean,
  *   onToggleCollapse: () => void,
  * }} props
@@ -27,6 +30,8 @@ export default function FileList({
 	onAdd,
 	onDelete,
 	onRename,
+	starter,
+	onApplyStarter,
 	collapsed,
 	onToggleCollapse,
 }) {
@@ -101,6 +106,20 @@ export default function FileList({
 				>
 					<${Icon} name=${collapsed ? 'sidebar-expand' : 'sidebar-collapse'} />
 				</button>
+			</div>
+			<div class="starter-row">
+				<label class="starter-label" for="starter-select">Starter</label>
+				<select
+					id="starter-select"
+					class="starter-select"
+					value=${starter}
+					onChange=${(e) => onApplyStarter(e.target.value)}
+				>
+					${Object.entries(STARTERS).map(
+						([key, { label }]) =>
+							html`<option key=${key} value=${key}>${label}</option>`,
+					)}
+				</select>
 			</div>
 			<ul class="file-list">
 				${files.map((f, i) => {

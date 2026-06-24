@@ -15,35 +15,17 @@ import {
 import { guessType } from '../lib/filetypes.js';
 import { downloadFiles } from '../lib/download.js';
 import { takePendingFiles } from '../lib/transfer.js';
+import { STARTERS, DEFAULT_STARTER } from '../lib/starters.js';
 
 const html = htm.bind(h);
 
 /** @typedef {import('../lib/types.js').FileEntry} FileEntry */
 
-const DEFAULT_FILES = [
-	{
-		name: 'index.html',
-		type: 'text/html',
-		content: new TextEncoder().encode(
-			`<!doctype html>\n<html>\n<head>\n  <meta charset="UTF-8" />\n  <title>My project</title>\n  <link rel="stylesheet" href="style.css" />\n</head>\n<body>\n  <h1>Hello, world!</h1>\n  <script src="script.js"></script>\n</body>\n</html>\n`,
-		),
-	},
-	{
-		name: 'style.css',
-		type: 'text/css',
-		content: new TextEncoder().encode(
-			`body {\n  font-family: sans-serif;\n  margin: 40px;\n}\n`,
-		),
-	},
-	{
-		name: 'script.js',
-		type: 'text/javascript',
-		content: new TextEncoder().encode(`console.log('Hello from script.js');\n`),
-	},
-];
-
 export default function EditorPage() {
-	const [files, setFiles] = useState(() => takePendingFiles() ?? DEFAULT_FILES);
+	const [files, setFiles] = useState(
+		() => takePendingFiles() ?? STARTERS[DEFAULT_STARTER].files(),
+	);
+	const [starter, setStarter] = useState(DEFAULT_STARTER);
 	const [activeIndex, setActiveIndex] = useState(0);
 	const [showShare, setShowShare] = useState(false);
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -167,6 +149,19 @@ export default function EditorPage() {
 		dragging.current = true;
 	}
 
+	function applyStarter(key) {
+		const choice = STARTERS[key];
+		if (!choice) return;
+		// Re-initializing replaces every open file, so confirm once the user has edits.
+		if (dirty.current && !window.confirm('Replace all files with this starter?')) {
+			return;
+		}
+		dirty.current = false;
+		setFiles(choice.files());
+		setStarter(key);
+		setActiveIndex(0);
+	}
+
 	function updateFile(index, content) {
 		dirty.current = true;
 		setFiles((prev) =>
@@ -248,6 +243,8 @@ export default function EditorPage() {
 					onAdd=${addFiles}
 					onDelete=${deleteFile}
 					onRename=${renameFile}
+					starter=${starter}
+					onApplyStarter=${applyStarter}
 					collapsed=${sidebarCollapsed}
 					onToggleCollapse=${() => setSidebarCollapsed((v) => !v)}
 				/>
