@@ -20,6 +20,12 @@ const SANDBOX_BASE = 'sandbox.linkify.ink';
 
 const isHosted = location.hostname === HOSTED_ORIGIN;
 
+// Bumped on every sandbox rebuild so the loader URL is always unique. Without this,
+// editing CSS/JS in local dev re-assigns iframe.src to the identical loader URL
+// (the origin is a fixed port there), which doesn't reload the iframe — so the
+// service worker never receives the edited files and keeps serving the originals.
+let sandboxNonce = 0;
+
 /**
  * @param {{
  *   files: FileEntry[],
@@ -165,9 +171,14 @@ function setupSandboxIframe(iframe, files, mainFile) {
 
 	window.addEventListener('message', onMessage);
 	// Pass the editor origin so the loader knows who to trust (the hosted Cloudflare
-	// loader hardcodes it instead; the query param is for the local dev loader).
+	// loader hardcodes it instead; the query param is for the local dev loader). The
+	// `v` nonce guarantees a fresh URL so the iframe actually reloads on every rebuild.
 	iframe.src =
-		sandboxOrigin + '/?parent=' + encodeURIComponent(location.origin);
+		sandboxOrigin +
+		'/?parent=' +
+		encodeURIComponent(location.origin) +
+		'&v=' +
+		++sandboxNonce;
 
 	return () => window.removeEventListener('message', onMessage);
 }
