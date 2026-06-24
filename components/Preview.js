@@ -9,6 +9,12 @@ const html = htm.bind(h);
 
 /** @typedef {import('../lib/types.js').FileEntry} FileEntry */
 
+/** @param {FileEntry} file @returns {boolean} */
+function isHtmlFile(file) {
+	const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+	return ext === 'html' || ext === 'htm';
+}
+
 const HOSTED_ORIGIN = 'linkify.ink';
 const SANDBOX_BASE = 'sandbox.linkify.ink';
 
@@ -24,13 +30,32 @@ export default function Preview({ files, activeFile }) {
 	const iframeRef = useRef(/** @type {HTMLIFrameElement | null} */ (null));
 	const blobUrlRef = useRef(/** @type {string | null} */ (null));
 	const sandboxCleanupRef = useRef(/** @type {(() => void) | null} */ (null));
+	// Name of the most recently *opened* HTML file. Once a project has HTML files
+	// the preview sticks to this one even while the user edits JS/CSS, so the
+	// rendered page doesn't disappear when you open its stylesheet or script.
+	const lastHtmlNameRef = useRef(/** @type {string | null} */ (null));
+
+	if (activeFile && isHtmlFile(activeFile)) {
+		lastHtmlNameRef.current = activeFile.name;
+	}
+
+	// Resolve which file the preview actually shows. When a non-HTML file is open
+	// but the project has HTML, keep showing the last-opened HTML file (or the
+	// first HTML file if none was opened yet). Otherwise just follow activeFile.
+	let previewFile = activeFile;
+	if (activeFile && !isHtmlFile(activeFile)) {
+		previewFile =
+			files.find((f) => f.name === lastHtmlNameRef.current) ??
+			files.find(isHtmlFile) ??
+			activeFile;
+	}
 
 	useEffect(() => {
-		if (!activeFile || !iframeRef.current) return;
+		if (!previewFile || !iframeRef.current) return;
 		// Declared (non-null) type so the nested helpers below keep the narrowing.
 		/** @type {HTMLIFrameElement} */
 		const iframe = iframeRef.current;
-		const file = activeFile;
+		const file = previewFile;
 
 		// Revoke the current blob URL / tear down the current sandbox listener.
 		function cleanup() {
@@ -82,18 +107,18 @@ export default function Preview({ files, activeFile }) {
 
 		// Debounce so rapid edits don't thrash the preview — rebuilding the sandbox
 		// iframe on every keystroke is expensive.
-		const timer = setTimeout(renderPreview, 150);
+		const timer = setTimeout(renderPreview, 600);
 		return () => {
 			clearTimeout(timer);
 			cleanup();
 		};
-	}, [activeFile, files]);
+	}, [previewFile, files]);
 
 	return html`
 		<div class="panel preview-panel">
 			<div class="panel-header">
-				<${Icon} name="eye" /> preview${activeFile
-					? ` — ${activeFile.name}`
+				<${Icon} name="eye" /> preview${previewFile
+					? ` — ${previewFile.name}`
 					: ''}
 			</div>
 			<iframe
