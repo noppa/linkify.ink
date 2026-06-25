@@ -30,7 +30,16 @@ self.addEventListener('fetch', (event) => {
 	const data = files.get(path);
 	if (data !== undefined) {
 		/** @type {FetchEvent} */ (event).respondWith(
-			new Response(data, { headers: { 'Content-Type': mimeFor(path) } }),
+			new Response(data, {
+				headers: {
+					'Content-Type': mimeFor(path),
+					// Live-editing preview: the same URLs (e.g. /style.css, /app.js) are
+					// re-served with new contents on every edit. Without no-store the
+					// browser's HTTP cache serves the original subresources back, so CSS/JS
+					// edits don't show up (the HTML document revalidates, subresources don't).
+					'Cache-Control': 'no-store',
+				},
+			}),
 		);
 	}
 	// Unknown path — fall through (network will 404; SW handled what it knows)

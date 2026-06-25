@@ -5,7 +5,8 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 		<title>sandbox</title>
 		<style>
-			body { margin: 0; background: #fff; }
+			html, body { margin: 0; height: 100%; background: #fff; }
+			iframe { border: 0; width: 100%; height: 100%; display: block; }
 		</style>
 	</head>
 	<body>
@@ -15,11 +16,24 @@
 				new URLSearchParams(location.search).get('parent') ||
 				'https://linkify.ink';
 			let pendingEntry = 'index.html';
+			let registration = null;
+			// Bumped on each (re)render so the nested iframe URL always changes and
+			// actually reloads — assigning an unchanged src would be a no-op, so edits
+			// wouldn't show. The SW matches on pathname and ignores this query.
+			let renderCount = 0;
 
 			async function init() {
 				if (!('serviceWorker' in navigator)) return;
 
-				await navigator.serviceWorker.register('/sandbox-sw.js', { scope: '/' });
+				registration = await navigator.serviceWorker.register('/sandbox-sw.js', { scope: '/' });
+
+				// Tear down the service worker when this sandbox goes away (the parent
+				// rebuilds or removes the iframe, or the editor navigates away). Without
+				// this, every preview build leaves a throwaway service worker registered —
+				// in prod each build gets its own UUID subdomain, so they'd pile up forever.
+				// This only fires on real teardown because the loader keeps itself alive and
+				// renders the entry in a nested iframe (below) instead of navigating away.
+				window.addEventListener('pagehide', () => { registration?.unregister(); });
 
 				// Wait until this page is controlled by the SW (may need skipWaiting + claim)
 				await new Promise((resolve) => {
@@ -27,15 +41,26 @@
 					navigator.serviceWorker.addEventListener('controllerchange', () => resolve(undefined), { once: true });
 				});
 
-				// SW sends 'ready' after storing files → navigate to entry
+				// SW sends 'ready' after storing files → show entry
 				navigator.serviceWorker.addEventListener('message', (event) => {
-					if (event.data?.type === 'ready') {
-						window.location.replace('/' + pendingEntry);
-					}
+					if (event.data?.type === 'ready') showEntry();
 				});
 
 				// Tell parent we're ready to receive the file payload
 				window.parent.postMessage({ type: 'sandbox-ready' }, PARENT_ORIGIN);
+			}
+
+			// Render the entry file in a nested iframe so this loader document stays alive
+			// (and keeps the SW registration) for the life of the preview, rather than
+			// navigating itself away with location.replace.
+			function showEntry() {
+				let frame = document.getElementById('content');
+				if (!frame) {
+					frame = document.createElement('iframe');
+					frame.id = 'content';
+					document.body.appendChild(frame);
+				}
+				frame.src = '/' + pendingEntry + '?__preview=' + ++renderCount;
 			}
 
 			// Receive files from the parent (linkify.ink editor)
