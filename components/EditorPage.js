@@ -41,6 +41,7 @@ export default function EditorPage() {
 	const rightRef = useRef(/** @type {HTMLDivElement | null} */ (null));
 	const dragging = useRef(false);
 	const dirty = useRef(false);
+	console.log('EditorPage render');
 
 	// Decode files from URL hash on first load
 	useEffect(() => {
@@ -81,6 +82,12 @@ export default function EditorPage() {
 		function onKey(e) {
 			if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'S') {
 				e.preventDefault();
+				// Blur the focused editor so DebouncedTextarea flushes its buffered
+				// edit (via onBlur) before the share reads files — the click paths
+				// blur naturally, but this keyboard shortcut wouldn't otherwise.
+				if (document.activeElement instanceof HTMLElement) {
+					document.activeElement.blur();
+				}
 				setShowShare(true);
 			}
 		}

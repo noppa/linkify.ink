@@ -67,15 +67,16 @@ export default function Preview({ files, activeFile }) {
 
 	useEffect(() => {
 		if (!previewFile || !iframeRef.current) return;
-		/** @type {HTMLIFrameElement} */
-		const iframe = iframeRef.current;
-		const file = previewFile;
-
-		// Debounce so rapid edits don't thrash the preview.
-		const timer = setTimeout(() => {
-			renderPreview(iframe, file, filesRef, sandboxRef, blobUrlRef);
-		}, 600);
-		return () => clearTimeout(timer);
+		// Edits are already debounced upstream (DebouncedTextarea commits at most
+		// once per idle interval), so render straight away. This also makes
+		// preview switches — opening a different file — instant.
+		renderPreview(
+			iframeRef.current,
+			previewFile,
+			filesRef,
+			sandboxRef,
+			blobUrlRef,
+		);
 	}, [previewFile, files]);
 
 	// Final teardown on unmount: revoke any blob URL and unregister the sandbox SW.

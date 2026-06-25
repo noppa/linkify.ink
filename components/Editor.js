@@ -2,6 +2,7 @@ import { h } from '../libraries.bundle.js';
 import { useState, useEffect } from '../libraries.bundle.js';
 import { htm } from '../libraries.bundle.js';
 import Icon from '../lib/icons.js';
+import DebouncedTextarea from './DebouncedTextarea.js';
 import { guessType, isTextFile, isImageFile } from '../lib/filetypes.js';
 
 const html = htm.bind(h);
@@ -32,25 +33,17 @@ export default function Editor({ file, onChange, onReplace }) {
 	}
 
 	const isText = isTextFile(file);
-	const text = isText ? new TextDecoder().decode(file.content) : '';
-
-	/** @param {Event} e */
-	function handleInput(e) {
-		const value = /** @type {HTMLTextAreaElement} */ (e.target).value;
-		onChange(new TextEncoder().encode(value));
-	}
 
 	return html`
 		<div class="panel editor-panel">
 			<div class="panel-header"><${Icon} name="code" /> ${file.name}</div>
 			<div class="editor-body">
 				${isText
-					? html`<textarea
-							class="editor-textarea"
-							value=${text}
-							onInput=${handleInput}
-							spellcheck=${false}
-						></textarea>`
+					? html`<${DebouncedTextarea}
+							key=${file.name}
+							file=${file}
+							onChange=${onChange}
+						/>`
 					: html`<div class="editor-binary-notice">
 							Binary file — not editable as text
 						</div>`}
