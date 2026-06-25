@@ -153,7 +153,10 @@ export default function EditorPage() {
 		const choice = STARTERS[key];
 		if (!choice) return;
 		// Re-initializing replaces every open file, so confirm once the user has edits.
-		if (dirty.current && !window.confirm('Replace all files with this starter?')) {
+		if (
+			dirty.current &&
+			!window.confirm('Replace all files with this starter?')
+		) {
 			return;
 		}
 		dirty.current = false;

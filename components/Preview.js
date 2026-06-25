@@ -83,7 +83,11 @@ export default function Preview({ files, activeFile }) {
 		}
 
 		function renderPreview() {
+			// TODO: Create utility function getFileExtension
 			const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+
+			// TODO: Create a function getFileType, which returns a string union.
+			// Then exhautively switch case over it instead of using if/else.
 			if (ext === 'md') {
 				const rendered = /** @type {string} */ (
 					marked.parse(new TextDecoder().decode(file.content))
@@ -92,6 +96,7 @@ export default function Preview({ files, activeFile }) {
 					`<html><body style="font-family:sans-serif;padding:16px;max-width:720px">${rendered}</body></html>`,
 				);
 			} else if (
+				// TODO: Create utility function isImage
 				['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'svg'].includes(ext)
 			) {
 				const url = URL.createObjectURL(
