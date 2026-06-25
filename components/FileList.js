@@ -46,6 +46,7 @@ export default function FileList({
 		const input = /** @type {HTMLInputElement} */ (e.target);
 		if (!input.files) return;
 		const newFiles = Array.from(input.files).map((f) => {
+			// TODO: Move to a readFileAsArrayBuffer utility
 			return new Promise((resolve) => {
 				const reader = new FileReader();
 				reader.onload = () => {
