@@ -1,0 +1,15 @@
+# Static SPA on linkify.ink, served via Cloudflare Workers Static Assets.
+# The sandbox worker (*.sandbox.linkify.ink) is a separate deployment; see
+# wrangler.toml. Deploy this with: npm run deploy:site
+name = "linkify-site"
+compatibility_date = "2026-07-08"
+
+[assets]
+directory = "./dist"
+# Unknown paths fall back to index.html so client-side routes (e.g. /receive,
+# /about) resolve, mirroring dev-server.mjs's ENOENT -> index.html behavior.
+not_found_handling = "single-page-application"
+
+[[routes]]
+pattern = "linkify.ink/*"
+zone_name = "linkify.ink"

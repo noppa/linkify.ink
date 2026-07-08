@@ -10,6 +10,10 @@
 		"bundle-libs-preview": "esbuild libraries-for-preview.js --bundle --format=esm --platform=browser --outfile=libraries-for-preview.bundle.js --loader:.wasm=dataurl --external:fs --external:path --banner:js='// @ts-nocheck\n// Auto-generated bundle of preview-only dependencies'",
 		"typecheck": "tsc --noEmit -p jsconfig.json",
 		"lint": "oxlint .",
+		"build": "npm run bundle-libs && node build.mjs",
+		"deploy": "npm run deploy:site && npm run deploy:sandbox",
+		"deploy:site": "npm run build && wrangler deploy -c wrangler.site.toml",
+		"deploy:sandbox": "wrangler deploy",
 		"test": "echo \"Error: no test specified\" && exit 1"
 	},
 	"keywords": [],
@@ -25,6 +29,7 @@
 		"marked": "^18.0.3",
 		"oxlint": "^1.35.0",
 		"preact": "^10.29.2",
-		"typescript": "^6.0.3"
+		"typescript": "^6.0.3",
+		"wrangler": "^4.107.1"
 	}
 }

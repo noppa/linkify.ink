@@ -1,6 +1,6 @@
 name = "linkify-sandbox"
 main = "sandbox-worker.js"
-compatibility_date = "2025-01-01"
+compatibility_date = "2026-07-08"
 
 [[routes]]
 pattern = "*.sandbox.linkify.ink/*"
