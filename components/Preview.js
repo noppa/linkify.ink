@@ -1,11 +1,24 @@
 import { h } from '../libraries.bundle.js';
 import { useEffect, useRef } from '../libraries.bundle.js';
 import { htm } from '../libraries.bundle.js';
-import { marked } from '../libraries.bundle.js';
 import Icon from '../lib/icons.js';
 import { guessType } from '../lib/filetypes.js';
 
 const html = htm.bind(h);
+
+/**
+ * Lazily load the preview-only library bundle (markdown renderer, and any future
+ * preview features). Kept out of the main bundle so the editor's critical path
+ * stays small; the import is cached so it only fetches once.
+ * @type {Promise<typeof import('../libraries-for-preview.bundle.js')> | null}
+ */
+let previewLibsPromise = null;
+function loadPreviewLibs() {
+	if (!previewLibsPromise) {
+		previewLibsPromise = import('../libraries-for-preview.bundle.js');
+	}
+	return previewLibsPromise;
+}
 
 /** @typedef {import('../lib/types.js').FileEntry} FileEntry */
 
@@ -65,18 +78,31 @@ export default function Preview({ files, activeFile }) {
 			activeFile;
 	}
 
+	// Warm up the preview-only bundle in the background as soon as the preview
+	// mounts, so the first markdown render doesn't wait on a cold fetch.
+	useEffect(() => {
+		loadPreviewLibs();
+	}, []);
+
 	useEffect(() => {
 		if (!previewFile || !iframeRef.current) return;
 		// Edits are already debounced upstream (DebouncedTextarea commits at most
 		// once per idle interval), so render straight away. This also makes
 		// preview switches — opening a different file — instant.
+		let cancelled = false;
 		renderPreview(
 			iframeRef.current,
 			previewFile,
 			filesRef,
 			sandboxRef,
 			blobUrlRef,
+			() => cancelled,
 		);
+		// Guards the async markdown path: if the file changes (or we unmount)
+		// before the lazy libs load, skip applying the now-stale render.
+		return () => {
+			cancelled = true;
+		};
 	}, [previewFile, files]);
 
 	// Final teardown on unmount: revoke any blob URL and unregister the sandbox SW.
@@ -111,8 +137,16 @@ export default function Preview({ files, activeFile }) {
  * @param {{ current: FileEntry[] }} filesRef
  * @param {{ current: Sandbox | null }} sandboxRef
  * @param {{ current: string | null }} blobUrlRef
+ * @param {() => boolean} isCancelled — true once this render is superseded
  */
-function renderPreview(iframe, file, filesRef, sandboxRef, blobUrlRef) {
+function renderPreview(
+	iframe,
+	file,
+	filesRef,
+	sandboxRef,
+	blobUrlRef,
+	isCancelled,
+) {
 	// TODO: Create utility function getFileExtension
 	const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
 
@@ -138,14 +172,19 @@ function renderPreview(iframe, file, filesRef, sandboxRef, blobUrlRef) {
 	revokeBlob(blobUrlRef);
 
 	if (ext === 'md') {
-		const rendered = /** @type {string} */ (
-			marked.parse(new TextDecoder().decode(file.content))
-		);
-		showBlob(
-			iframe,
-			blobUrlRef,
-			`<html><body style="font-family:sans-serif;padding:16px;max-width:720px">${rendered}</body></html>`,
-		);
+		// The markdown renderer lives in the lazy preview bundle; wait for it,
+		// then bail if a newer render has superseded this one.
+		loadPreviewLibs().then(({ marked }) => {
+			if (isCancelled()) return;
+			const rendered = /** @type {string} */ (
+				marked.parse(new TextDecoder().decode(file.content))
+			);
+			showBlob(
+				iframe,
+				blobUrlRef,
+				`<html><body style="font-family:sans-serif;padding:16px;max-width:720px">${rendered}</body></html>`,
+			);
+		});
 	} else if (
 		// TODO: Create utility function isImage
 		['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'svg'].includes(ext)

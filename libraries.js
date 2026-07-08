@@ -1,7 +1,6 @@
 export { h, render, Fragment } from 'preact';
 export { useState, useEffect, useRef, useCallback } from 'preact/hooks';
 export { default as htm } from 'htm';
-export { marked } from 'marked';
 export * as ZstdWasm from './node_modules/@bokuweb/zstd-wasm/dist/esm/index.web';
 // @ts-ignore
 export { default as zstdWasmBase64DataUrl } from './node_modules/@bokuweb/zstd-wasm/dist/web/zstd.wasm';
