@@ -2,7 +2,6 @@ import { h } from '../libraries.bundle.js';
 import { useEffect, useRef } from '../libraries.bundle.js';
 import { htm } from '../libraries.bundle.js';
 import Icon from '../lib/icons.js';
-import { guessType } from '../lib/filetypes.js';
 
 const html = htm.bind(h);
 
@@ -23,11 +22,21 @@ function loadPreviewLibs() {
 /** @typedef {import('../lib/types.js').FileEntry} FileEntry */
 
 /**
+ * A rendered preview document that isn't one of the project's own files — e.g.
+ * markdown compiled to HTML, or a plain-text file wrapped in a <pre>. It's
+ * injected into the sandbox's file map under a reserved name so it, too, is
+ * served (and thus isolated) from the throwaway sandbox origin rather than the
+ * editor's origin.
+ * @typedef {{ name: string, content: Uint8Array }} SyntheticFile
+ */
+
+/**
  * Live connection to a running sandbox iframe, kept alive across edits so we can
  * push new files without tearing down (and re-registering) its service worker.
  * @typedef {{
  *   origin: string,
  *   entry: string,
+ *   extra: SyntheticFile | null,
  *   ready: boolean,
  *   onMessage: (event: MessageEvent) => void,
  * }} Sandbox
@@ -44,6 +53,11 @@ const SANDBOX_BASE = 'sandbox.linkify.ink';
 
 const isHosted = location.hostname === HOSTED_ORIGIN;
 
+// Reserved filename for rendered previews (markdown, plain text) that we inject
+// into the sandbox. The leading dunder + suffix makes a real-file collision
+// vanishingly unlikely; it must end in .html so the SW serves it as text/html.
+const PREVIEW_ENTRY = '__linkify_preview__.html';
+
 /**
  * @param {{
  *   files: FileEntry[],
@@ -52,7 +66,6 @@ const isHosted = location.hostname === HOSTED_ORIGIN;
  */
 export default function Preview({ files, activeFile }) {
 	const iframeRef = useRef(/** @type {HTMLIFrameElement | null} */ (null));
-	const blobUrlRef = useRef(/** @type {string | null} */ (null));
 	const sandboxRef = useRef(/** @type {Sandbox | null} */ (null));
 	// Always-current file list, so the sandbox message handlers (which outlive a
 	// single render) send the latest contents rather than a stale snapshot.
@@ -95,7 +108,6 @@ export default function Preview({ files, activeFile }) {
 			previewFile,
 			filesRef,
 			sandboxRef,
-			blobUrlRef,
 			() => cancelled,
 		);
 		// Guards the async markdown path: if the file changes (or we unmount)
@@ -105,10 +117,9 @@ export default function Preview({ files, activeFile }) {
 		};
 	}, [previewFile, files]);
 
-	// Final teardown on unmount: revoke any blob URL and unregister the sandbox SW.
+	// Final teardown on unmount: unregister the sandbox service worker.
 	useEffect(
 		() => () => {
-			revokeBlob(blobUrlRef);
 			teardownSandbox(iframeRef.current, sandboxRef);
 		},
 		[],
@@ -117,9 +128,9 @@ export default function Preview({ files, activeFile }) {
 	return html`
 		<div class="panel preview-panel">
 			<div class="panel-header">
-				<${Icon} name="eye" /> preview${previewFile
-					? ` — ${previewFile.name}`
-					: ''}
+				<${Icon} name="eye" /> preview${
+					previewFile ? ` — ${previewFile.name}` : ''
+				}
 			</div>
 			<iframe
 				ref=${iframeRef}
@@ -132,44 +143,43 @@ export default function Preview({ files, activeFile }) {
 }
 
 /**
+ * Decide what document the preview should show and route it through the sandbox.
+ *
+ * Every preview type — HTML, markdown, images, plain text — is served from the
+ * throwaway sandbox origin rather than the editor's own origin. Rendered
+ * markdown in particular can contain arbitrary HTML/JS (author-supplied, or via
+ * a bug in the markdown parser), so it must be isolated just like a hand-written
+ * HTML file. HTML files and images are served as themselves; markdown and text
+ * are compiled into a synthetic HTML document injected into the sandbox.
+ *
  * @param {HTMLIFrameElement} iframe
  * @param {FileEntry} file
  * @param {{ current: FileEntry[] }} filesRef
  * @param {{ current: Sandbox | null }} sandboxRef
- * @param {{ current: string | null }} blobUrlRef
  * @param {() => boolean} isCancelled — true once this render is superseded
  */
-function renderPreview(
-	iframe,
-	file,
-	filesRef,
-	sandboxRef,
-	blobUrlRef,
-	isCancelled,
-) {
+function renderPreview(iframe, file, filesRef, sandboxRef, isCancelled) {
 	// TODO: Create utility function getFileExtension
 	const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
 
 	// TODO: Create a function getFileType, which returns a string union.
 	// Then exhaustively switch case over it instead of using if/else.
 	if (ext === 'html' || ext === 'htm') {
-		revokeBlob(blobUrlRef);
-		const sandbox = sandboxRef.current;
-		if (sandbox && sandbox.entry === file.name) {
-			// Same page already running — just push the edited files into it.
-			pushFiles(iframe, sandbox, filesRef);
-		} else {
-			// First render, or the entry HTML changed — (re)create the sandbox.
-			teardownSandbox(iframe, sandboxRef);
-			initSandbox(iframe, file.name, filesRef, sandboxRef);
-		}
+		// The HTML file is the entry; the SW serves it (and its subresources) as-is.
+		showInSandbox(iframe, file.name, null, filesRef, sandboxRef);
 		return;
 	}
 
-	// Non-HTML previews render straight into the iframe via a blob URL, so any
-	// running sandbox (and its service worker) is no longer needed.
-	teardownSandbox(iframe, sandboxRef);
-	revokeBlob(blobUrlRef);
+	if (
+		// TODO: Create utility function isImage
+		['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'svg'].includes(ext)
+	) {
+		// The image is the entry; the SW serves it with its own content type and the
+		// browser displays it directly. SVG is deliberately included here — it can
+		// carry script, so it belongs in the sandbox too.
+		showInSandbox(iframe, file.name, null, filesRef, sandboxRef);
+		return;
+	}
 
 	if (ext === 'md') {
 		// The markdown renderer lives in the lazy preview bundle; wait for it,
@@ -179,43 +189,72 @@ function renderPreview(
 			const rendered = /** @type {string} */ (
 				marked.parse(new TextDecoder().decode(file.content))
 			);
-			showBlob(
+			const doc = `<!doctype html><html><head><meta charset="utf-8"></head><body style="font-family:sans-serif;padding:16px;max-width:720px">${rendered}</body></html>`;
+			showInSandbox(
 				iframe,
-				blobUrlRef,
-				`<html><body style="font-family:sans-serif;padding:16px;max-width:720px">${rendered}</body></html>`,
+				PREVIEW_ENTRY,
+				syntheticFile(doc),
+				filesRef,
+				sandboxRef,
 			);
 		});
-	} else if (
-		// TODO: Create utility function isImage
-		['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'svg'].includes(ext)
-	) {
-		const url = URL.createObjectURL(
-			new Blob([file.content], {
-				type: file.type || guessType(file.name, 'image/png'),
-			}),
-		);
-		blobUrlRef.current = url;
-		iframe.src = url;
+		return;
+	}
+
+	// Everything else: show the raw text in a <pre>.
+	const text = escapeHtml(new TextDecoder().decode(file.content));
+	const doc = `<!doctype html><html><head><meta charset="utf-8"></head><body><pre style="margin:0;padding:10px;font-family:monospace;white-space:pre-wrap">${text}</pre></body></html>`;
+	showInSandbox(
+		iframe,
+		PREVIEW_ENTRY,
+		syntheticFile(doc),
+		filesRef,
+		sandboxRef,
+	);
+}
+
+/** @param {string} htmlSource @returns {SyntheticFile} */
+function syntheticFile(htmlSource) {
+	return { name: PREVIEW_ENTRY, content: new TextEncoder().encode(htmlSource) };
+}
+
+/**
+ * Show `entry` in the sandbox, reusing the running one when the entry is
+ * unchanged (just push the latest files) and otherwise (re)creating it.
+ * @param {HTMLIFrameElement} iframe
+ * @param {string} entry
+ * @param {SyntheticFile | null} extra — rendered document to inject, if any
+ * @param {{ current: FileEntry[] }} filesRef
+ * @param {{ current: Sandbox | null }} sandboxRef
+ */
+function showInSandbox(iframe, entry, extra, filesRef, sandboxRef) {
+	const sandbox = sandboxRef.current;
+	if (sandbox && sandbox.entry === entry) {
+		// Same entry already running — just refresh the injected doc and push files.
+		sandbox.extra = extra;
+		pushFiles(iframe, sandbox, filesRef);
 	} else {
-		const text = escapeHtml(new TextDecoder().decode(file.content));
-		showBlob(
-			iframe,
-			blobUrlRef,
-			`<pre style="margin:0;padding:10px;font-family:monospace;white-space:pre-wrap">${text}</pre>`,
-		);
+		// First render, or the entry changed — (re)create the sandbox.
+		teardownSandbox(iframe, sandboxRef);
+		initSandbox(iframe, entry, extra, filesRef, sandboxRef);
 	}
 }
 
 /**
- * Build the {name: bytes} payload the sandbox service worker serves from.
+ * Build the {name: bytes} payload the sandbox service worker serves from,
+ * including the injected synthetic document (if any).
  * @param {FileEntry[]} files
+ * @param {SyntheticFile | null} extra
  * @returns {Record<string, Uint8Array>}
  */
-function buildFilesData(files) {
+function buildFilesData(files, extra) {
 	/** @type {Record<string, Uint8Array>} */
 	const filesData = {};
 	for (const f of files) {
 		filesData[f.name] = f.content;
+	}
+	if (extra) {
+		filesData[extra.name] = extra.content;
 	}
 	return filesData;
 }
@@ -225,10 +264,11 @@ function buildFilesData(files) {
  * record it in sandboxRef. Files are sent once the loader reports it's ready.
  * @param {HTMLIFrameElement} iframe
  * @param {string} entry
+ * @param {SyntheticFile | null} extra
  * @param {{ current: FileEntry[] }} filesRef
  * @param {{ current: Sandbox | null }} sandboxRef
  */
-function initSandbox(iframe, entry, filesRef, sandboxRef) {
+function initSandbox(iframe, entry, extra, filesRef, sandboxRef) {
 	// Local dev: the sandbox runs on editor port + 1 (see dev-server.mjs), a distinct
 	// origin so its service worker can't hijack the editor. Hosted: a throwaway UUID
 	// subdomain. Either way the origin is fixed for this sandbox's lifetime so we can
@@ -238,7 +278,7 @@ function initSandbox(iframe, entry, filesRef, sandboxRef) {
 		: `${location.protocol}//${location.hostname}:${Number(location.port) + 1}`;
 
 	/** @type {Sandbox} */
-	const sandbox = { origin, entry, ready: false, onMessage: () => {} };
+	const sandbox = { origin, entry, extra, ready: false, onMessage: () => {} };
 
 	/** @param {MessageEvent} event */
 	sandbox.onMessage = (event) => {
@@ -247,7 +287,11 @@ function initSandbox(iframe, entry, filesRef, sandboxRef) {
 		// The loader is up and controlled by its SW — send the current files.
 		sandbox.ready = true;
 		iframe.contentWindow?.postMessage(
-			{ type: 'files', files: buildFilesData(filesRef.current), entry },
+			{
+				type: 'files',
+				files: buildFilesData(filesRef.current, sandbox.extra),
+				entry,
+			},
 			origin,
 		);
 	};
@@ -272,7 +316,7 @@ function pushFiles(iframe, sandbox, filesRef) {
 	iframe.contentWindow?.postMessage(
 		{
 			type: 'files',
-			files: buildFilesData(filesRef.current),
+			files: buildFilesData(filesRef.current, sandbox.extra),
 			entry: sandbox.entry,
 		},
 		sandbox.origin,
@@ -291,25 +335,6 @@ function teardownSandbox(iframe, sandboxRef) {
 	window.removeEventListener('message', sandbox.onMessage);
 	sandboxRef.current = null;
 	if (iframe) iframe.src = 'about:blank';
-}
-
-/**
- * @param {HTMLIFrameElement} iframe
- * @param {{ current: string | null }} blobUrlRef
- * @param {string} src
- */
-function showBlob(iframe, blobUrlRef, src, type = 'text/html') {
-	const url = URL.createObjectURL(new Blob([src], { type }));
-	blobUrlRef.current = url;
-	iframe.src = url;
-}
-
-/** @param {{ current: string | null }} blobUrlRef */
-function revokeBlob(blobUrlRef) {
-	if (blobUrlRef.current) {
-		URL.revokeObjectURL(blobUrlRef.current);
-		blobUrlRef.current = null;
-	}
 }
 
 /** @param {string} str */
