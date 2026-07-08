@@ -12,6 +12,7 @@ zone_name = "linkify.ink"
 [[rules]]
 type = "Text"
 globs = ["sandbox-loader.html", "sandbox-sw.js"]
+fallthrough = true
 
 [[rules]]
 type = "ESModule"
