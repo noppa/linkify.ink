@@ -49,7 +49,11 @@ function isHtmlFile(file) {
 }
 
 const HOSTED_ORIGIN = 'linkify.ink';
-const SANDBOX_BASE = 'sandbox.linkify.ink';
+// Sandbox hosts are single-label subdomains (sandbox-<uuid>.linkify.ink) so the
+// free *.linkify.ink Universal SSL cert covers them; a second-level wildcard like
+// *.sandbox.linkify.ink would need a paid Cloudflare cert. The sandbox worker is
+// scoped to this prefix via its sandbox-*.linkify.ink route.
+const SANDBOX_PREFIX = 'sandbox-';
 
 const isHosted = location.hostname === HOSTED_ORIGIN;
 
@@ -260,7 +264,7 @@ function buildFilesData(files, extra) {
 }
 
 /**
- * Create a sandboxed iframe using a *.sandbox.linkify.ink service worker and
+ * Create a sandboxed iframe using a sandbox-*.linkify.ink service worker and
  * record it in sandboxRef. Files are sent once the loader reports it's ready.
  * @param {HTMLIFrameElement} iframe
  * @param {string} entry
@@ -274,7 +278,7 @@ function initSandbox(iframe, entry, extra, filesRef, sandboxRef) {
 	// subdomain. Either way the origin is fixed for this sandbox's lifetime so we can
 	// keep messaging it as the user edits.
 	const origin = isHosted
-		? `https://${crypto.randomUUID()}.${SANDBOX_BASE}`
+		? `https://${SANDBOX_PREFIX}${crypto.randomUUID()}.${HOSTED_ORIGIN}`
 		: `${location.protocol}//${location.hostname}:${Number(location.port) + 1}`;
 
 	/** @type {Sandbox} */

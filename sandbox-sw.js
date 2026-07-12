@@ -1,4 +1,4 @@
-// Service worker for *.sandbox.linkify.ink — serves files from in-memory map
+// Service worker for sandbox-*.linkify.ink — serves files from in-memory map
 
 /** @type {Map<string, Uint8Array>} */
 const files = new Map();

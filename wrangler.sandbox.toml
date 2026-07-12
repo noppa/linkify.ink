@@ -3,7 +3,7 @@ main = "sandbox-worker.js"
 compatibility_date = "2026-07-08"
 
 [[routes]]
-pattern = "*.sandbox.linkify.ink/*"
+pattern = "sandbox-*.linkify.ink/*"
 zone_name = "linkify.ink"
 
 # Import sandbox-loader.html and sandbox-sw.js as text modules. The Text rule is

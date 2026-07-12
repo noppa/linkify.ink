@@ -42,7 +42,7 @@ const requestedRelativePaths = new Set(['index.html']);
 
 const port = Number(process.env.PORT) || 8080;
 // The sandbox preview is served on its own port so it's a distinct origin from the
-// editor (mirrors *.sandbox.linkify.ink in production). Different port = different
+// editor (mirrors sandbox-*.linkify.ink in production). Different port = different
 // origin, so the preview's service worker can't hijack the editor.
 const sandboxPort = Number(process.env.SANDBOX_PORT) || port + 1;
 const updateInterval = process.env.UPDATE_INTERVAL || 5000;
@@ -65,7 +65,7 @@ setTimeout(checkUpdates, ${updateInterval});
 `;
 
 /**
- * Local mirror of the *.sandbox.linkify.ink Cloudflare worker, served on its own
+ * Local mirror of the sandbox-*.linkify.ink Cloudflare worker, served on its own
  * port (sandboxPort). Serves the loader at / and the service worker at
  * /sandbox-sw.js; everything else is a preview file the service worker handles.
  * @param {http.IncomingMessage} request

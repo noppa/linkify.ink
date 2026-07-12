@@ -1,4 +1,4 @@
-// Cloudflare Worker for *.sandbox.linkify.ink
+// Cloudflare Worker for sandbox-*.linkify.ink
 // Serves sandbox-loader.html and sandbox-sw.js for all subdomains. Both are imported
 // from the repo root as text modules (see the [[rules]] in wrangler.toml) so the
 // hosted sandbox stays in sync with the local dev-server, which serves the same files.

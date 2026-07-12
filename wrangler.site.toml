@@ -1,6 +1,6 @@
 # Static SPA on linkify.ink, served via Cloudflare Workers Static Assets.
-# The sandbox worker (*.sandbox.linkify.ink) is a separate deployment; see
-# wrangler.toml. Deploy this with: npm run deploy:site
+# The sandbox worker (sandbox-*.linkify.ink) is a separate deployment; see
+# wrangler.sandbox.toml. Deploy this with: npm run deploy:site
 name = "linkify-site"
 compatibility_date = "2026-07-08"
 

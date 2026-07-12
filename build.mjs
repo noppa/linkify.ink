@@ -2,7 +2,7 @@
 // Static Assets. Run `npm run bundle-libs` first (the deploy script chains it) so
 // the library bundles exist. Only files the browser actually fetches from
 // linkify.ink are copied — the sandbox files (sandbox-*.{html,js}) belong to the
-// separate *.sandbox.linkify.ink worker and are deliberately left out.
+// separate sandbox-*.linkify.ink worker and are deliberately left out.
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
