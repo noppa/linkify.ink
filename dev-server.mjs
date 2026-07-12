@@ -75,8 +75,10 @@ async function serveSandbox(request, response) {
 	const pathOnly = (request.url || '/').split('?')[0];
 
 	if (pathOnly === '/sandbox-sw.js') {
+		// Stored as .js.txt so the production worker bundles it as text; served here
+		// at the /sandbox-sw.js URL to mirror that worker.
 		const sw = await fs.promises.readFile(
-			path.join(import.meta.dirname, 'sandbox-sw.js'),
+			path.join(import.meta.dirname, 'sandbox-sw.js.txt'),
 		);
 		response.writeHead(200, {
 			...baseHeaders,

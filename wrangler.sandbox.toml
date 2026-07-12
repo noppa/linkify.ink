@@ -2,18 +2,15 @@ name = "linkify-sandbox"
 main = "sandbox-worker.js"
 compatibility_date = "2026-07-08"
 
+# Cloudflare route patterns only allow a wildcard at the start of the hostname
+# (no mid-label wildcard like sandbox-*), so this matches all subdomains and the
+# worker itself narrows to sandbox-<uuid> hosts.
 [[routes]]
-pattern = "sandbox-*.linkify.ink/*"
+pattern = "*.linkify.ink/*"
 zone_name = "linkify.ink"
 
-# Import sandbox-loader.html and sandbox-sw.js as text modules. The Text rule is
-# listed first so sandbox-sw.js is bundled as a string; the ESModule rule (matched
-# afterwards) keeps sandbox-worker.js itself a normal module.
-[[rules]]
-type = "Text"
-globs = ["sandbox-loader.html", "sandbox-sw.js"]
-fallthrough = true
-
-[[rules]]
-type = "ESModule"
-globs = ["**/*.js", "**/*.mjs"]
+# No custom module rules: sandbox-worker.js imports sandbox-loader.html and
+# sandbox-sw.js.txt, both of which Wrangler's built-in Text rule (**/*.html,
+# **/*.txt) imports as strings. The service-worker file is deliberately named
+# .js.txt rather than .js so the default ESModule rule (**/*.js) doesn't claim it
+# and bundle it as an object; see sandbox-worker.js.

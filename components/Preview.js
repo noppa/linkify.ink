@@ -51,8 +51,9 @@ function isHtmlFile(file) {
 const HOSTED_ORIGIN = 'linkify.ink';
 // Sandbox hosts are single-label subdomains (sandbox-<uuid>.linkify.ink) so the
 // free *.linkify.ink Universal SSL cert covers them; a second-level wildcard like
-// *.sandbox.linkify.ink would need a paid Cloudflare cert. The sandbox worker is
-// scoped to this prefix via its sandbox-*.linkify.ink route.
+// *.sandbox.linkify.ink would need a paid Cloudflare cert. The worker runs on a
+// *.linkify.ink route (Cloudflare disallows a sandbox-* route wildcard) and
+// narrows to this prefix itself.
 const SANDBOX_PREFIX = 'sandbox-';
 
 const isHosted = location.hostname === HOSTED_ORIGIN;
