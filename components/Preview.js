@@ -153,7 +153,7 @@ export default function Preview({ files, activeFile }) {
  * throwaway sandbox origin rather than the editor's own origin. Rendered
  * markdown in particular can contain arbitrary HTML/JS (author-supplied, or via
  * a bug in the markdown parser), so it must be isolated just like a hand-written
- * HTML file. HTML files and images are served as themselves; markdown and text
+ * HTML file. HTML files are served as themselves; markdown, text, and images
  * are compiled into a synthetic HTML document injected into the sandbox.
  *
  * @param {HTMLIFrameElement} iframe
@@ -178,10 +178,24 @@ function renderPreview(iframe, file, filesRef, sandboxRef, isCancelled) {
 		// TODO: Create utility function isImage
 		['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'svg'].includes(ext)
 	) {
-		// The image is the entry; the SW serves it with its own content type and the
-		// browser displays it directly. SVG is deliberately included here — it can
-		// carry script, so it belongs in the sandbox too.
-		showInSandbox(iframe, file.name, null, filesRef, sandboxRef);
+		// Wrap the image in a synthetic HTML document rather than making it the
+		// sandbox entry directly. A bare image response is rendered by the browser's
+		// built-in "image document" viewer, which shows it at native pixel size with
+		// no regard for the iframe's actual size — on a narrow mobile iframe that
+		// means the image is left oversized and cropped (or, depending on the
+		// browser's zoom heuristics, rendered tiny) instead of fitted to the frame.
+		// The wrapper gives us a real viewport meta tag plus CSS to fit the image to
+		// the iframe consistently. SVG is deliberately included in the image list
+		// above — it can carry script, so it belongs in the sandbox too.
+		const src = escapeHtml(file.name).replace(/"/g, '&quot;');
+		const doc = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;height:100%;display:flex;align-items:center;justify-content:center;background:#f5f5f5}img{max-width:100%;max-height:100%;object-fit:contain}</style></head><body><img src="${src}" alt="${src}"></body></html>`;
+		showInSandbox(
+			iframe,
+			PREVIEW_ENTRY,
+			syntheticFile(doc),
+			filesRef,
+			sandboxRef,
+		);
 		return;
 	}
 
