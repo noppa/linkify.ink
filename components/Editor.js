@@ -1,11 +1,16 @@
 import { h } from '../libraries.bundle.js';
-import { useState, useEffect } from '../libraries.bundle.js';
+import { useState, useEffect, useRef } from '../libraries.bundle.js';
 import { htm } from '../libraries.bundle.js';
 import Icon from '../lib/icons.js';
 import DebouncedTextarea from './DebouncedTextarea.js';
 import { guessType, isTextFile, isImageFile } from '../lib/filetypes.js';
 
 const html = htm.bind(h);
+
+// Each press shrinks the image to 75% of its current size.
+const DOWNSCALE_FACTOR = 0.75;
+// Stop offering downscale once either dimension would drop to/below this.
+const MIN_DIMENSION = 16;
 
 /** @typedef {import('../lib/types.js').FileEntry} FileEntry */
 
@@ -60,8 +65,15 @@ export default function Editor({ file, onChange, onReplace }) {
  */
 function ImageViewer({ file, onReplace }) {
 	const [blobUrl, setBlobUrl] = useState('');
-	const [converting, setConverting] = useState(false);
+	const [processing, setProcessing] = useState(false);
 	const [avifSupported, setAvifSupported] = useState(false);
+	const [dims, setDims] = useState(/** @type {{width: number, height: number} | null} */ (null));
+	// The pristine version of this image, kept only in local component state.
+	const [original, setOriginal] = useState(file);
+	// Tracks the FileEntry we most recently produced ourselves, so the effect
+	// below can tell "we replaced the file" apart from "a different file was
+	// selected" and only reset `original` in the latter case.
+	const producedRef = useRef(/** @type {FileEntry | null} */ (null));
 
 	useEffect(() => {
 		// Feature-detect AVIF encoding support
@@ -72,6 +84,14 @@ function ImageViewer({ file, onReplace }) {
 	}, []);
 
 	useEffect(() => {
+		if (file !== producedRef.current) {
+			setOriginal(file);
+			setDims(null);
+		}
+		producedRef.current = null;
+	}, [file]);
+
+	useEffect(() => {
 		if (!file.content.length) return;
 		const type = file.type || guessType(file.name, 'image/png');
 		const url = URL.createObjectURL(new Blob([file.content], { type }));
@@ -79,43 +99,94 @@ function ImageViewer({ file, onReplace }) {
 		return () => URL.revokeObjectURL(url);
 	}, [file.content, file.type]);
 
+	/** @param {FileEntry} newFile */
+	function apply(newFile) {
+		producedRef.current = newFile;
+		if (onReplace) onReplace(newFile);
+	}
+
 	/** @param {string} format */
 	async function convert(format) {
 		if (!onReplace) return;
-		setConverting(true);
+		setProcessing(true);
 		try {
-			const result = await recompress(file, format);
-			if (result) onReplace(result);
+			const result = await transformImage(file, { format });
+			if (result) apply(result);
 		} finally {
-			setConverting(false);
+			setProcessing(false);
 		}
 	}
+
+	async function downscale() {
+		if (!onReplace) return;
+		setProcessing(true);
+		try {
+			const result = await transformImage(file, { scale: DOWNSCALE_FACTOR });
+			if (result) apply(result);
+		} finally {
+			setProcessing(false);
+		}
+	}
+
+	function restoreOriginal() {
+		if (!onReplace || file === original) return;
+		apply(original);
+	}
+
+	const canDownscale =
+		!dims || Math.min(dims.width, dims.height) * DOWNSCALE_FACTOR > MIN_DIMENSION;
+	const canRestore = file !== original;
 
 	return html`
 		<div class="panel editor-panel">
 			<div class="panel-header"><${Icon} name="image" /> ${file.name}</div>
 			<div class="editor-image-viewer">
 				${blobUrl &&
-				html`<img src=${blobUrl} alt=${file.name} class="editor-image" />`}
+				html`<img
+					src=${blobUrl}
+					alt=${file.name}
+					class="editor-image"
+					onLoad=${(e) =>
+						setDims({
+							width: e.target.naturalWidth,
+							height: e.target.naturalHeight,
+						})}
+				/>`}
 				${onReplace &&
 				html`
 					<div class="editor-image-actions">
+						<button
+							class="btn"
+							onClick=${downscale}
+							disabled=${processing || !canDownscale}
+							title="Shrink the image to 75% of its current size"
+						>
+							${processing ? 'Working…' : 'Downscale'}
+						</button>
+						<button
+							class="btn"
+							onClick=${restoreOriginal}
+							disabled=${processing || !canRestore}
+							title="Restore the image as it was before any edits"
+						>
+							Restore original
+						</button>
 						<span class="editor-image-hint"
 							>Lossy recompression (renames file):</span
 						>
 						<button
 							class="btn"
 							onClick=${() => convert('image/webp')}
-							disabled=${converting}
+							disabled=${processing}
 						>
-							${converting ? 'Converting…' : 'Convert to WebP'}
+							Convert to WebP
 						</button>
 						${avifSupported &&
 						html`
 							<button
 								class="btn"
 								onClick=${() => convert('image/avif')}
-								disabled=${converting}
+								disabled=${processing}
 							>
 								Convert to AVIF
 							</button>
@@ -127,29 +198,34 @@ function ImageViewer({ file, onReplace }) {
 	`;
 }
 
+// MIME types canvas.toBlob() can lossily re-encode; others (png, gif, ...) are lossless.
+const LOSSY_TYPES = new Set(['image/jpeg', 'image/webp', 'image/avif']);
+
 /**
- * Recompress an image to WebP or AVIF via canvas.toBlob().
+ * Re-encode an image via canvas.toBlob(), optionally converting format and/or
+ * scaling its dimensions.
  * @param {FileEntry} file
- * @param {string} format  'image/webp' | 'image/avif'
+ * @param {{ format?: string, scale?: number }} options
  * @returns {Promise<FileEntry | null>}
  */
-async function recompress(file, format) {
+async function transformImage(file, { format, scale = 1 } = {}) {
 	return new Promise((resolve) => {
-		const type = file.type || guessType(file.name, 'image/png');
-		const blob = new Blob([file.content], { type });
+		const sourceType = file.type || guessType(file.name, 'image/png');
+		const targetType = format || sourceType;
+		const blob = new Blob([file.content], { type: sourceType });
 		const url = URL.createObjectURL(blob);
 		const img = new Image();
 		img.onload = () => {
 			const canvas = document.createElement('canvas');
-			canvas.width = img.naturalWidth;
-			canvas.height = img.naturalHeight;
+			canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+			canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
 			const ctx = canvas.getContext('2d');
 			if (!ctx) {
 				URL.revokeObjectURL(url);
 				resolve(null);
 				return;
 			}
-			ctx.drawImage(img, 0, 0);
+			ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 			canvas.toBlob(
 				(result) => {
 					URL.revokeObjectURL(url);
@@ -157,13 +233,14 @@ async function recompress(file, format) {
 						resolve(null);
 						return;
 					}
-					const ext = format === 'image/avif' ? 'avif' : 'webp';
-					const name = file.name.replace(/\.[^.]+$/, '') + '.' + ext;
+					// Some browsers silently fall back to PNG for formats they can't
+					// encode (e.g. gif); trust what toBlob() actually produced.
+					const actualType = result.type || targetType;
 					const reader = new FileReader();
 					reader.onload = () => {
 						resolve({
-							name,
-							type: format,
+							name: renameForType(file.name, sourceType, actualType),
+							type: actualType,
 							content: new Uint8Array(
 								/** @type {ArrayBuffer} */ (reader.result),
 							),
@@ -171,8 +248,8 @@ async function recompress(file, format) {
 					};
 					reader.readAsArrayBuffer(result);
 				},
-				format,
-				0.85,
+				targetType,
+				LOSSY_TYPES.has(targetType) ? 0.85 : undefined,
 			);
 		};
 		img.onerror = () => {
@@ -181,4 +258,11 @@ async function recompress(file, format) {
 		};
 		img.src = url;
 	});
+}
+
+/** @param {string} name @param {string} fromType @param {string} toType @returns {string} */
+function renameForType(name, fromType, toType) {
+	if (toType === fromType) return name;
+	const ext = toType.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
+	return name.replace(/\.[^.]+$/, '') + '.' + ext;
 }
