@@ -424,6 +424,33 @@ html, body {
 	background: var(--accent);
 }
 
+/* ── Mobile editor/preview tab bar (hidden on desktop) ── */
+.mobile-tabs {
+	display: none;
+}
+
+.mobile-tab {
+	flex: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	padding: 8px;
+	background: none;
+	border: none;
+	border-bottom: 2px solid transparent;
+	color: var(--text-muted);
+	font-family: inherit;
+	font-size: 12px;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.mobile-tab.active {
+	color: var(--accent);
+	border-bottom-color: var(--accent);
+}
+
 /* ── Preview iframe ── */
 .preview-iframe {
 	flex: 1;
@@ -652,7 +679,7 @@ html, body {
 @media (max-width: 640px) {
 	.main {
 		grid-template-columns: 1fr;
-		grid-template-rows: auto 1fr 1fr;
+		grid-template-rows: auto 1fr;
 	}
 
 	.sidebar {
@@ -660,5 +687,34 @@ html, body {
 		overflow-y: auto;
 		border-right: none;
 		border-bottom: 1px solid var(--border);
+	}
+
+	.right {
+		display: flex;
+		flex-direction: column;
+	}
+
+	.mobile-tabs {
+		display: flex;
+		background: var(--bg2);
+		border-bottom: 1px solid var(--border);
+	}
+
+	.right .editor-panel,
+	.right .preview-panel {
+		flex: 1;
+		min-height: 0;
+	}
+
+	.right .divider-handle {
+		display: none;
+	}
+
+	.right.mobile-tab-editor .preview-panel {
+		display: none;
+	}
+
+	.right.mobile-tab-preview .editor-panel {
+		display: none;
 	}
 }

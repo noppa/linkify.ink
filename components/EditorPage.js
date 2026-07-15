@@ -22,11 +22,25 @@ const html = htm.bind(h);
 /** @typedef {import('../lib/types.js').FileEntry} FileEntry */
 
 export default function EditorPage() {
-	const [files, setFiles] = useState(
-		() => takePendingFiles() ?? STARTERS[DEFAULT_STARTER].files(),
-	);
+	// Captured once on mount: whether these files arrived via a shared link (URL
+	// hash, or handed off from ReceivePage), before takePendingFiles() consumes
+	// the hand-off slot and the hash effect below clears the URL hash.
+	const [initial] = useState(() => {
+		const pendingFiles = takePendingFiles();
+		const cameFromSharedLink =
+			pendingFiles !== null || window.location.hash.length > 1;
+		return {
+			files: pendingFiles ?? STARTERS[DEFAULT_STARTER].files(),
+			cameFromSharedLink,
+		};
+	});
+	const [files, setFiles] = useState(initial.files);
 	const [starter, setStarter] = useState(DEFAULT_STARTER);
 	const [activeIndex, setActiveIndex] = useState(0);
+	// Mobile-only editor/preview tab switcher; defaults to preview for shared links.
+	const [mobileTab, setMobileTab] = useState(
+		initial.cameFromSharedLink ? 'preview' : 'editor',
+	);
 	const [showShare, setShowShare] = useState(false);
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 	const [hashError, setHashError] = useState('');
@@ -259,7 +273,21 @@ export default function EditorPage() {
 					onToggleCollapse=${() => setSidebarCollapsed((v) => !v)}
 				/>
 
-				<div class="right" ref=${rightRef}>
+				<div class="right mobile-tab-${mobileTab}" ref=${rightRef}>
+					<div class="mobile-tabs">
+						<button
+							class="mobile-tab ${mobileTab === 'editor' ? 'active' : ''}"
+							onClick=${() => setMobileTab('editor')}
+						>
+							<${Icon} name="code" /> Editor
+						</button>
+						<button
+							class="mobile-tab ${mobileTab === 'preview' ? 'active' : ''}"
+							onClick=${() => setMobileTab('preview')}
+						>
+							<${Icon} name="eye" /> Preview
+						</button>
+					</div>
 					<${Editor}
 						file=${activeFile}
 						onChange=${(content) => updateFile(activeIndex, content)}
