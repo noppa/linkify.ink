@@ -6,12 +6,7 @@ import Editor from './Editor.js';
 import Preview from './Preview.js';
 import ShareModal from './ShareModal.js';
 import Icon from '../lib/icons.js';
-import {
-	decode,
-	peekEncryptionType,
-	ENC_PASSWORD,
-	ENC_ECDH,
-} from '../lib/codec.js';
+import { linkify, LinkifyInk } from '../lib/linkify.js';
 import { guessType } from '../lib/filetypes.js';
 import { downloadFiles } from '../lib/download.js';
 import { takePendingFiles } from '../lib/transfer.js';
@@ -61,20 +56,20 @@ export default function EditorPage() {
 	useEffect(() => {
 		const hash = window.location.hash;
 		if (!hash || hash.length <= 1) return;
-		const encType = peekEncryptionType(hash);
-		if (encType === ENC_ECDH) {
+		const encType = linkify.peekEncryptionType(hash);
+		if (encType === LinkifyInk.ENC_ECDH) {
 			// ECDH: navigate to /receive which holds the private key for this session
 			window.location.assign('/receive' + hash);
 			return;
 		}
-		if (encType === ENC_PASSWORD) {
+		if (encType === LinkifyInk.ENC_PASSWORD) {
 			// Password-encrypted: clear the hash from the URL and prompt before decoding
 			window.history.replaceState(null, '', window.location.pathname);
 			setHashPending(hash);
 			return;
 		}
 		window.history.replaceState(null, '', window.location.pathname);
-		decode(hash)
+		linkify.readLink(hash)
 			.then(({ files: decoded }) => {
 				setFiles(
 					decoded.map((f) => ({
@@ -145,7 +140,7 @@ export default function EditorPage() {
 		setHashLoading(true);
 		setHashError('');
 		try {
-			const { files: decoded } = await decode(hashPending, {
+			const { files: decoded } = await linkify.readLink(hashPending, {
 				password: hashPassword,
 			});
 			setFiles(

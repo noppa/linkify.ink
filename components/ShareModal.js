@@ -2,9 +2,7 @@ import { h, Fragment } from '../libraries.bundle.js';
 import { useState } from '../libraries.bundle.js';
 import { htm } from '../libraries.bundle.js';
 import Icon from '../lib/icons.js';
-import { encode } from '../lib/codec.js';
-import { decode as b64decode } from '../lib/base64url.js';
-import { importPublicKey } from '../lib/crypto.js';
+import { linkify, LinkifyInk } from '../lib/linkify.js';
 
 const html = htm.bind(h);
 
@@ -32,7 +30,7 @@ export default function ShareModal({ files, onClose }) {
 		setError('');
 		setUrl('');
 		try {
-			/** @type {Parameters<typeof encode>[1]} */
+			/** @type {Parameters<typeof linkify.createLink>[1]} */
 			const opts = { encryption };
 			if (encryption === 'password') {
 				if (!password) throw new Error('Enter a password');
@@ -40,12 +38,12 @@ export default function ShareModal({ files, onClose }) {
 			} else if (encryption === 'ecdh') {
 				if (!recipientKey.trim())
 					throw new Error("Paste the recipient's public key");
-				const raw = b64decode(recipientKey.trim());
+				const raw = LinkifyInk.base64UrlDecode(recipientKey.trim());
 				// Validate key by importing it
-				await importPublicKey(raw);
+				await linkify.importPublicKey(raw);
 				opts.recipientPublicKey = raw;
 			}
-			const result = await encode(
+			const result = await linkify.createLink(
 				files.map((f) => ({ name: f.name, data: f.content })),
 				opts,
 			);

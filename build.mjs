@@ -18,6 +18,8 @@ const entries = [
 	'favicon.ico',
 	'libraries.bundle.js',
 	'libraries-for-preview.bundle.js',
+	'vendor.codec.bundle.js',
+	'linkify.ink.js',
 	'components',
 	'lib',
 ];

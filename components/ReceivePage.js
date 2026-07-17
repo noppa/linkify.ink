@@ -2,14 +2,7 @@ import { h } from '../libraries.bundle.js';
 import { useState, useEffect } from '../libraries.bundle.js';
 import { htm } from '../libraries.bundle.js';
 import Icon from '../lib/icons.js';
-import {
-	decode,
-	peekEncryptionType,
-	ENC_PASSWORD,
-	ENC_ECDH,
-} from '../lib/codec.js';
-import { encode as b64encode } from '../lib/base64url.js';
-import { generateEcdhKeypair, exportPublicKey } from '../lib/crypto.js';
+import { linkify, LinkifyInk } from '../lib/linkify.js';
 import { guessType } from '../lib/filetypes.js';
 import { downloadFiles } from '../lib/download.js';
 import { setPendingFiles } from '../lib/transfer.js';
@@ -57,9 +50,9 @@ export default function ReceivePage() {
 				/* fall through to generate */
 			}
 
-			const { publicKey, privateKey } = await generateEcdhKeypair();
-			const rawPub = await exportPublicKey(publicKey);
-			const pubBase64 = b64encode(rawPub);
+			const { publicKey, privateKey } = await linkify.generateKeypair();
+			const rawPub = await linkify.exportPublicKey(publicKey);
+			const pubBase64 = LinkifyInk.base64UrlEncode(rawPub);
 			const jwk = await crypto.subtle.exportKey('jwk', privateKey);
 			try {
 				sessionStorage.setItem(
@@ -111,7 +104,7 @@ export default function ReceivePage() {
 	}
 
 	const parsedHash = parseHash(pasteInput);
-	const detectedEncType = parsedHash ? peekEncryptionType(parsedHash) : null;
+	const detectedEncType = parsedHash ? linkify.peekEncryptionType(parsedHash) : null;
 
 	async function handleOpen() {
 		if (!parsedHash) {
@@ -125,13 +118,13 @@ export default function ReceivePage() {
 		try {
 			/** @type {{ password?: string, privateKey?: CryptoKey }} */
 			const opts = {};
-			if (detectedEncType === ENC_ECDH) {
+			if (detectedEncType === LinkifyInk.ENC_ECDH) {
 				if (!ecdhPrivateKey)
 					throw new Error(
 						'Keypair not ready — please wait a moment and try again',
 					);
 				opts.privateKey = ecdhPrivateKey;
-			} else if (detectedEncType === ENC_PASSWORD) {
+			} else if (detectedEncType === LinkifyInk.ENC_PASSWORD) {
 				if (!password) {
 					setError('Enter the password');
 					setLoading(false);
@@ -139,7 +132,7 @@ export default function ReceivePage() {
 				}
 				opts.password = password;
 			}
-			const result = await decode(parsedHash, opts);
+			const result = await linkify.readLink(parsedHash, opts);
 			setFiles(
 				result.files.map((f) => ({
 					name: f.name,
@@ -150,11 +143,11 @@ export default function ReceivePage() {
 		} catch (e) {
 			console.error(e);
 			const msg = e instanceof Error ? e.message : String(e);
-			if (detectedEncType === ENC_ECDH) {
+			if (detectedEncType === LinkifyInk.ENC_ECDH) {
 				setError(
 					'Decryption failed. The link may not have been encrypted with your public key.',
 				);
-			} else if (detectedEncType === ENC_PASSWORD) {
+			} else if (detectedEncType === LinkifyInk.ENC_PASSWORD) {
 				setError('Decryption failed. Wrong password?');
 			} else {
 				setError(msg);
@@ -182,7 +175,7 @@ export default function ReceivePage() {
 	}
 
 	const openDisabled =
-		loading || !pasteInput.trim() || (detectedEncType === 2 && !ecdhPrivateKey);
+		loading || !pasteInput.trim() || (detectedEncType === LinkifyInk.ENC_ECDH && !ecdhPrivateKey);
 
 	return html`
 		<div class="receive-page">
@@ -236,7 +229,7 @@ export default function ReceivePage() {
 						placeholder="https://linkify.ink/#..."
 						rows="3"
 					></textarea>
-					${detectedEncType === ENC_PASSWORD &&
+					${detectedEncType === LinkifyInk.ENC_PASSWORD &&
 					html`
 						<div class="modal-row">
 							<label>Password</label>
