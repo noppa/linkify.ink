@@ -11,10 +11,16 @@
 		"lib": ["ESNext", "DOM"]
 	},
 	"include": [
+		"linkify.ink.js",
 		"lib/**/*.js",
 		"lib/**/*.mjs",
 		"components/**/*.js",
 		"components/**/*.mjs"
 	],
-	"exclude": ["libraries.bundle.js", "node_modules", "vendors"]
+	"exclude": [
+		"libraries.bundle.js",
+		"vendor.codec.bundle.js",
+		"node_modules",
+		"vendors"
+	]
 }
