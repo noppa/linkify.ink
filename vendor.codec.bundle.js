@@ -1510,10 +1510,17 @@ var zstd_default = "data:application/wasm;base64,AGFzbQEAAAAB0gIkYAR/f39/AX9gBX9
 // vendor.codec.js
 var Argon2 = __toESM(require_argon23());
 var import_argon2 = __toESM(require_argon22());
+var linkifyInkCodecDependencies = {
+  zstd: index_web_exports,
+  zstdWasmUrl: zstd_default,
+  argon2: Argon2,
+  argon2WasmUrl: import_argon2.default
+};
 var export_argon2WasmBase64DataUrl = import_argon2.default;
 export {
   Argon2,
   index_web_exports as ZstdWasm,
   export_argon2WasmBase64DataUrl as argon2WasmBase64DataUrl,
+  linkifyInkCodecDependencies,
   zstd_default as zstdWasmBase64DataUrl
 };

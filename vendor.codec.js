@@ -2,10 +2,32 @@
 // into vendor.codec.bundle.js. This is the only vendor bundle the lib
 // (linkify.ink.js) needs — the UI's rendering deps live in libraries.bundle.js.
 // Anything that only wants to create/read links (an AI agent, a CLI tool) imports
-// this bundle plus linkify.ink.js and needs nothing else.
-export * as ZstdWasm from './node_modules/@bokuweb/zstd-wasm/dist/esm/index.web';
+// this bundle plus linkify.ink.js and needs nothing else:
+//
+//   import { linkifyInkCodecDependencies } from './vendor.codec.bundle.js';
+//   import { LinkifyInk } from './linkify.ink.js';
+//   const linkify = new LinkifyInk(linkifyInkCodecDependencies);
+//
+// The individual exports are kept for callers that want to swap one dependency
+// out; `linkifyInkCodecDependencies` is the ready-made bundle to hand straight to
+// the constructor.
+import * as ZstdWasm from './node_modules/@bokuweb/zstd-wasm/dist/esm/index.web';
 // @ts-ignore
-export { default as zstdWasmBase64DataUrl } from './node_modules/@bokuweb/zstd-wasm/dist/web/zstd.wasm';
-export * as Argon2 from 'argon2-browser';
+import zstdWasmBase64DataUrl from './node_modules/@bokuweb/zstd-wasm/dist/web/zstd.wasm';
+import * as Argon2 from 'argon2-browser';
 // @ts-ignore
-export { default as argon2WasmBase64DataUrl } from './node_modules/argon2-browser/dist/argon2.wasm';
+import argon2WasmBase64DataUrl from './node_modules/argon2-browser/dist/argon2.wasm';
+
+export { ZstdWasm, zstdWasmBase64DataUrl, Argon2, argon2WasmBase64DataUrl };
+
+/**
+ * Every dependency `LinkifyInk` needs, in the shape its constructor expects.
+ * Spread it to add or override fields, e.g.
+ * `{ ...linkifyInkCodecDependencies, origin }`.
+ */
+export const linkifyInkCodecDependencies = {
+	zstd: ZstdWasm,
+	zstdWasmUrl: zstdWasmBase64DataUrl,
+	argon2: Argon2,
+	argon2WasmUrl: argon2WasmBase64DataUrl,
+};

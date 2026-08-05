@@ -9,16 +9,14 @@
 // The caller is responsible for importing the vendor bundle (vendor.codec.bundle.js)
 // and this file, then constructing an instance with the vendored libraries:
 //
-//   import * as vendor from './vendor.codec.bundle.js';
+//   import { linkifyInkCodecDependencies } from './vendor.codec.bundle.js';
 //   import { LinkifyInk } from './linkify.ink.js';
 //
-//   const linkify = new LinkifyInk({
-//     zstd: vendor.ZstdWasm,
-//     zstdWasmUrl: vendor.zstdWasmBase64DataUrl,
-//     argon2: vendor.Argon2,
-//     argon2WasmUrl: vendor.argon2WasmBase64DataUrl,
-//     origin: 'https://linkify.ink', // or location.origin in a browser
-//   });
+//   const linkify = new LinkifyInk(linkifyInkCodecDependencies);
+//
+// `linkifyInkCodecDependencies` is a ready-made bundle of the vendored libraries;
+// spread it to override anything, e.g.
+// `new LinkifyInk({ ...linkifyInkCodecDependencies, origin: location.origin })`.
 //
 //   const url = await linkify.createLink(files, { encryption: 'password', password });
 //   const { files, metadata } = await linkify.readLink(url, { password });
