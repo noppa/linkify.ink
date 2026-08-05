@@ -11,6 +11,9 @@
 // The individual exports are kept for callers that want to swap one dependency
 // out; `linkifyInkCodecDependencies` is the ready-made bundle to hand straight to
 // the constructor.
+// Must stay the first import: it patches the environment the vendor modules read
+// as they evaluate. See vendor.codec.shim.js.
+import './vendor.codec.shim.js';
 import * as ZstdWasm from './node_modules/@bokuweb/zstd-wasm/dist/esm/index.web';
 // @ts-ignore
 import zstdWasmBase64DataUrl from './node_modules/@bokuweb/zstd-wasm/dist/web/zstd.wasm';

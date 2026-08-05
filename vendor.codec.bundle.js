@@ -63,7 +63,7 @@ var require_argon2 = __commonJS({
     var ENVIRONMENT_IS_SHELL = false;
     ENVIRONMENT_IS_WEB = typeof window === "object";
     ENVIRONMENT_IS_WORKER = typeof importScripts === "function";
-    ENVIRONMENT_IS_NODE = typeof process === "object" && typeof process.versions === "object" && typeof process.versions.node === "string";
+    ENVIRONMENT_IS_NODE = false;
     ENVIRONMENT_IS_SHELL = !ENVIRONMENT_IS_WEB && !ENVIRONMENT_IS_NODE && !ENVIRONMENT_IS_WORKER;
     var scriptDirectory = "";
     function locateFile(path) {
@@ -98,21 +98,21 @@ var require_argon2 = __commonJS({
         assert(ret.buffer);
         return ret;
       };
-      if (process["argv"].length > 1) {
-        thisProgram2 = process["argv"][1].replace(/\\/g, "/");
+      if ((void 0)["argv"].length > 1) {
+        thisProgram2 = (void 0)["argv"][1].replace(/\\/g, "/");
       }
-      arguments_2 = process["argv"].slice(2);
+      arguments_2 = (void 0)["argv"].slice(2);
       if (typeof module !== "undefined") {
         module["exports"] = Module3;
       }
-      process["on"]("uncaughtException", function(ex) {
+      (void 0)["on"]("uncaughtException", function(ex) {
         if (!(ex instanceof ExitStatus2)) {
           throw ex;
         }
       });
-      process["on"]("unhandledRejection", abort2);
+      (void 0)["on"]("unhandledRejection", abort2);
       quit_2 = function(status) {
-        process["exit"](status);
+        (void 0)["exit"](status);
       };
       Module3["inspect"] = function() {
         return "[Emscripten Module object]";
@@ -931,6 +931,11 @@ var require_argon23 = __commonJS({
       };
     });
   }
+});
+
+// vendor.codec.shim.js
+globalThis.self ??= new Proxy(globalThis, {
+  get: (target, prop) => prop === "process" ? void 0 : Reflect.get(target, prop)
 });
 
 // node_modules/@bokuweb/zstd-wasm/dist/esm/index.web.js

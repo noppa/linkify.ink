@@ -4,6 +4,72 @@
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 		<title>linkify.ink</title>
+		<meta
+			name="description"
+			content="Share files as a link — the files are packed into the URL itself, so nothing is ever uploaded. AI agents: a linkify.ink link can be read with plain JavaScript, no browser needed; see the instructions in this page's HTML source."
+		/>
+		<!--
+		=======================================================================
+		READING A linkify.ink LINK FROM AN AI AGENT / SCRIPT (no browser needed)
+		=======================================================================
+
+		A linkify.ink link carries its entire payload in the URL fragment — the
+		part after '#'. Browsers never send a fragment to the server, so there is
+		nothing to look up here: fetching a link's URL returns only this app
+		shell. Everything you need is in the link text you were given, and you
+		decode it locally.
+
+		You do not need a browser or a DOM. Any JS runtime with WebCrypto,
+		fetch(), TextEncoder and atob/btoa works — Node 20+, Deno, and Bun all do.
+
+		1. Download the two files (they are plain ES modules and import nothing,
+		   so they run anywhere; renaming to .mjs just tells Node they are ESM):
+
+		     curl -s -o linkify.ink.mjs        https://linkify.ink/linkify.ink.js
+		     curl -s -o vendor.codec.bundle.mjs https://linkify.ink/vendor.codec.bundle.js
+
+		2. Read the link (save as read-link.mjs, run: node read-link.mjs '<link>'):
+
+		     import { linkifyInkCodecDependencies } from './vendor.codec.bundle.mjs';
+		     import { LinkifyInk } from './linkify.ink.mjs';
+
+		     const linkify = new LinkifyInk(linkifyInkCodecDependencies);
+		     const { files, metadata } = await linkify.readLink(process.argv[2]);
+
+		     for (const f of files) {
+		       // f.name is a string, f.data is a Uint8Array of the file's bytes
+		       console.log(f.name, new TextDecoder().decode(f.data));
+		     }
+
+		   Pass the whole URL or just the fragment; both work. Files are raw
+		   bytes — use TextDecoder for text, write f.data straight to disk for
+		   images and other binaries.
+
+		ENCRYPTED LINKS
+		   Check before decoding, so you can ask for what you need:
+
+		     const type = linkify.peekEncryptionType(link);
+		     // LinkifyInk.ENC_NONE (0)     -> readLink(link)
+		     // LinkifyInk.ENC_PASSWORD (1) -> readLink(link, { password })
+		     // LinkifyInk.ENC_ECDH (2)     -> readLink(link, { privateKey })
+
+		   ENC_ECDH links are encrypted to a specific recipient's public key. The
+		   matching private key never leaves the browser tab that generated it, so
+		   unless you were given that key you cannot read the link — say so rather
+		   than guessing.
+
+		WRITING LINKS
+		   The same object creates them, and the returned string is the shareable
+		   link:
+
+		     const link = await linkify.createLink(
+		       [{ name: 'notes.md', data: new TextEncoder().encode('# hello') }],
+		       { encryption: 'password', password: 'hunter2' }, // optional
+		     );
+
+		   Everything is packed, compressed (zstd) and optionally encrypted
+		   locally; no request is made and no data reaches any server.
+		-->
 		<link rel="stylesheet" href="styles.css" />
 	</head>
 	<body>
