@@ -8,18 +8,24 @@
 		"target": "ESNext",
 		"module": "ESNext",
 		"moduleResolution": "bundler",
-		"lib": ["ESNext", "DOM"]
+		"lib": ["ESNext", "DOM"],
+		"types": ["chrome"]
 	},
 	"include": [
 		"linkify.ink.js",
+		"vendor.readability.bundle.d.ts",
 		"lib/**/*.js",
 		"lib/**/*.mjs",
 		"components/**/*.js",
-		"components/**/*.mjs"
+		"components/**/*.mjs",
+		"extension/**/*.js",
+		"extension/**/*.d.ts"
 	],
 	"exclude": [
 		"libraries.bundle.js",
 		"vendor.codec.bundle.js",
+		"vendor.readability.bundle.js",
+		"extension/vendor",
 		"node_modules",
 		"vendors"
 	]

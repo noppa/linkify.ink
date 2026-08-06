@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>linkify.ink</title>
+		<link rel="stylesheet" href="popup.css" />
+	</head>
+	<body>
+		<header class="topbar">
+			<div class="logo-dot"></div>
+			linkify.ink
+		</header>
+
+		<main>
+			<div class="row">
+				<label for="mode">Capture</label>
+				<select id="mode">
+					<option value="article">Article only (Readability)</option>
+					<option value="full">Full page</option>
+				</select>
+			</div>
+
+			<div class="row">
+				<label for="encryption">Encryption</label>
+				<select id="encryption">
+					<option value="none">None (public link)</option>
+					<option value="password">Password (Argon2id + AES-GCM)</option>
+				</select>
+			</div>
+
+			<label class="check">
+				<input id="images" type="checkbox" />
+				<span>Include images <em>(much longer links)</em></span>
+			</label>
+
+			<div class="row" id="password-row" hidden>
+				<label for="password">Password</label>
+				<input id="password" type="password" placeholder="Enter a strong password" />
+			</div>
+
+			<button id="capture" class="btn btn-primary">Capture page</button>
+
+			<p id="status" class="status" hidden></p>
+
+			<section id="result" hidden>
+				<div class="result-head">
+					<span id="title" class="title"></span>
+					<span id="size" class="size"></span>
+				</div>
+				<div id="url" class="url"></div>
+				<p id="notes" class="notes" hidden></p>
+				<div class="actions">
+					<button id="copy" class="btn">Copy link</button>
+					<button id="open" class="btn">Open</button>
+				</div>
+			</section>
+		</main>
+
+		<!-- External, never inline: MV3's extension_pages CSP forbids inline script. -->
+		<script type="module" src="popup.js"></script>
+	</body>
+</html>

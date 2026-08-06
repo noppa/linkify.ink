@@ -41,6 +41,23 @@ Everything runs client-side using web platform primitives:
 - **Minimal moving parts.** The app is plain JavaScript with Preact + htm — no JSX, no build step for the app code itself. Only the vendored npm dependencies are bundled (with esbuild) into a single committed `libraries.bundle.js`. Types are checked from JSDoc annotations with `tsgo --noEmit`.
 - **Sandboxed previews.** Untrusted HTML/JS from a link never runs on the main origin. Previews execute on a `*.sandbox.linkify.ink` wildcard subdomain backed by a tiny Cloudflare Worker, with files served by a per-tab service worker.
 
+## Browser extension
+
+`extension/` holds a Chrome (MV3) extension that turns the page you're reading into a link. It extracts the article with [Readability](https://github.com/mozilla/readability) — the same extractor Firefox Reader Mode uses — writes it as a self-contained `article.html`, and packs it through the same `LinkifyInk` class the site uses. Nothing is uploaded; the extension is just another consumer of the library.
+
+```sh
+npm run build:extension   # bundles deps and assembles extension/vendor/
+```
+
+Then load it: `chrome://extensions` → Developer mode → **Load unpacked** → pick `extension/`.
+
+The whole design is shaped by URL length. Measured on real prose, a capture ends up at roughly **half the character count of its markup** after zstd — so a typical article lands around 8,000–15,000 characters and a very long one approaches the 32,000 mark where the site starts warning about truncation. Two consequences:
+
+- **Article-only mode is the default.** Full-page capture is available for pages Readability can't parse, but it's much larger.
+- **Images are dropped by default,** keeping their alt text. They're already compressed, so zstd gains nothing and every byte costs ~1.33 characters of URL. The opt-in "include images" toggle re-encodes them to WebP under a 48KB budget and stores them as sibling archive entries (`assets/img-0.webp`), which the preview sandbox serves like any other project file — expect links around 64,000 characters. It requests host permission at the moment you enable it, since inlining means fetching from whatever hosts the article points at.
+
+Captured markup is sanitized before it's packed — scripts, styles, embeds and event handlers stripped, attributes reduced to an allowlist, links absolutized. That's defence in depth on top of the preview sandbox, not a replacement for it.
+
 ## Development
 
 ```sh
@@ -48,8 +65,11 @@ npm install
 npm start          # local dev server
 npm run typecheck  # type-check JSDoc annotations
 npm run lint       # oxlint
-npm run bundle-libs  # rebuild libraries.bundle.js after changing deps
+npm run bundle-libs  # rebuild the vendored bundles after changing deps
+npm run build:extension  # rebuild bundles + assemble extension/vendor/
 ```
+
+`extension/vendor/` is gitignored and assembled by `build-extension.mjs`; `npm run typecheck` covers `extension/` and needs it in place, which is why CI builds it first.
 
 ## License
 

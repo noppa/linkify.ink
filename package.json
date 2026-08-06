@@ -5,10 +5,12 @@
 	"main": "index.js",
 	"scripts": {
 		"start": "node dev-server.mjs",
-		"bundle-libs": "npm run bundle-libs-core && npm run bundle-libs-codec && npm run bundle-libs-preview",
+		"bundle-libs": "npm run bundle-libs-core && npm run bundle-libs-codec && npm run bundle-libs-preview && npm run bundle-libs-readability",
 		"bundle-libs-core": "esbuild libraries.js --bundle --format=esm --platform=browser --outfile=libraries.bundle.js --loader:.wasm=dataurl --external:fs --external:path --banner:js='// @ts-nocheck\n// Auto-generated bundle of UI dependencies'",
 		"bundle-libs-codec": "esbuild vendor.codec.js --bundle --format=esm --platform=browser --outfile=vendor.codec.bundle.js --loader:.wasm=dataurl --external:fs --external:path --define:process=undefined --banner:js='// @ts-nocheck\n// Auto-generated bundle of codec dependencies (zstd + argon2)'",
 		"bundle-libs-preview": "esbuild libraries-for-preview.js --bundle --format=esm --platform=browser --outfile=libraries-for-preview.bundle.js --loader:.wasm=dataurl --external:fs --external:path --banner:js='// @ts-nocheck\n// Auto-generated bundle of preview-only dependencies'",
+		"bundle-libs-readability": "esbuild vendor.readability.js --bundle --format=iife --global-name=LinkifyReadability --platform=browser --outfile=vendor.readability.bundle.js --banner:js='// @ts-nocheck\n// Auto-generated bundle of the extension'\\''s page-capture dependency (Readability).\n// IIFE, not ESM: chrome.scripting.executeScript injects classic scripts.'",
+		"build:extension": "npm run bundle-libs && node build-extension.mjs",
 		"typecheck": "tsc --noEmit -p jsconfig.json",
 		"lint": "oxlint .",
 		"build": "npm run bundle-libs && node build.mjs",
@@ -22,7 +24,9 @@
 	"license": "ISC",
 	"devDependencies": {
 		"@bokuweb/zstd-wasm": "^0.0.27",
+		"@mozilla/readability": "^0.6.0",
 		"@types/argon2-browser": "^1.18.4",
+		"@types/chrome": "^0.2.5",
 		"@types/node": "^25.9.2",
 		"argon2-browser": "^1.18.0",
 		"esbuild": "^0.28.0",

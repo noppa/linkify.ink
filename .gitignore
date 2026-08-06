@@ -132,3 +132,6 @@ dist
 # Deploy build output
 dist/
 .wrangler/
+
+# Copied into place by build-extension.mjs; sources of truth live at the repo root.
+extension/vendor/
