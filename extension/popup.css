@@ -1,0 +1,224 @@
+/* Popup styling. Deliberately a trimmed-down copy of the site's look — the same
+   monospace face, the same palette variables, the same flat bordered controls —
+   so the extension reads as part of linkify.ink rather than a separate tool.
+   It is not shared with styles.css: that file is an app shell (panels, split
+   view, modals) and almost none of it applies to a 340px popup. */
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+	margin: 0;
+	padding: 0;
+}
+
+:root {
+	color-scheme: light dark;
+	--bg: light-dark(#f8f8ff, #1e2a2a);
+	--surface: light-dark(#fff, #2a3838);
+	--border: light-dark(#d0d0dd, #3a4a4a);
+	--text: light-dark(#2f4f4f, #e8f0f0);
+	--text-muted: light-dark(#527070, #96b0b0);
+	--accent: light-dark(#3b82f6, #60a5fa);
+	--accent-hover: light-dark(#2563eb, #3b82f6);
+	--ok: light-dark(#15803d, #4ade80);
+	--warn: light-dark(#b45309, #fbbf24);
+	--bad: light-dark(#b91c1c, #f87171);
+	--dot: #3b82f6;
+	font-family: ui-monospace, 'Cascadia Code', 'Fira Code', monospace;
+	font-size: 13px;
+}
+
+body {
+	width: 340px;
+	background: var(--bg);
+	color: var(--text);
+}
+
+.topbar {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 10px 12px;
+	border-bottom: 1px solid var(--border);
+	font-weight: 600;
+}
+
+.logo-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--dot);
+}
+
+main {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: 12px;
+}
+
+.row {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.row[hidden] {
+	display: none;
+}
+
+label {
+	color: var(--text-muted);
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+select,
+input {
+	padding: 6px 8px;
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	background: var(--surface);
+	color: var(--text);
+	font: inherit;
+}
+
+.check {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	color: var(--text);
+	font-size: 12px;
+	text-transform: none;
+	letter-spacing: normal;
+	cursor: pointer;
+}
+
+.check input {
+	flex-shrink: 0;
+	width: auto;
+	margin: 0;
+	accent-color: var(--accent);
+}
+
+.check em {
+	color: var(--text-muted);
+	font-style: normal;
+}
+
+.btn {
+	padding: 7px 10px;
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	background: var(--surface);
+	color: var(--text);
+	font: inherit;
+	cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+	border-color: var(--accent);
+}
+
+.btn:disabled {
+	opacity: 0.6;
+	cursor: default;
+}
+
+.btn-primary {
+	border-color: transparent;
+	background: var(--accent);
+	color: #fff;
+}
+
+.btn-primary:hover:not(:disabled) {
+	background: var(--accent-hover);
+}
+
+.status {
+	color: var(--text-muted);
+	line-height: 1.4;
+}
+
+.status.error {
+	color: var(--bad);
+}
+
+section {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding-top: 10px;
+	border-top: 1px solid var(--border);
+}
+
+section[hidden] {
+	display: none;
+}
+
+.result-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.title {
+	overflow: hidden;
+	color: var(--text-muted);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* Traffic light against the 32,000-char point where the site starts warning
+   that browsers may truncate the link. */
+.size {
+	flex-shrink: 0;
+	font-weight: 600;
+}
+
+.size.ok {
+	color: var(--ok);
+}
+
+.size.warn {
+	color: var(--warn);
+}
+
+.size.bad {
+	color: var(--bad);
+}
+
+.url {
+	max-height: 72px;
+	padding: 6px 8px;
+	overflow-y: auto;
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	background: var(--surface);
+	color: var(--text-muted);
+	font-size: 11px;
+	overflow-wrap: anywhere;
+	user-select: all;
+}
+
+.notes {
+	color: var(--text-muted);
+	font-size: 11px;
+	line-height: 1.4;
+}
+
+.notes[hidden] {
+	display: none;
+}
+
+.actions {
+	display: flex;
+	gap: 6px;
+}
+
+.actions .btn {
+	flex: 1;
+}

@@ -14,4 +14,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # extension/vendor/ is gitignored, so it has to be assembled before the
+      # extension's own files can be type-checked against the codec bundle.
+      - run: npm run build:extension
       - run: npm run typecheck
