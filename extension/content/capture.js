@@ -23,6 +23,7 @@
 	 *   readerable: boolean,
 	 *   mode: 'article' | 'full',
 	 *   images: { name: string, url: string }[],
+	 *   linkedImages: number,
 	 *   droppedImages: number,
 	 * }} Capture
 	 */
@@ -92,12 +93,13 @@
 	 * Strip a parsed fragment down to safe, compact markup, in place.
 	 * @param {Element} root
 	 * @param {string} base page URL, for resolving relative links
-	 * @param {'drop' | 'inline'} imageMode
-	 * @returns {{ images: { name: string, url: string }[], droppedImages: number }}
+	 * @param {'link' | 'inline'} imageMode
+	 * @returns {{ images: { name: string, url: string }[], linkedImages: number, droppedImages: number }}
 	 */
 	function sanitize(root, base, imageMode) {
 		/** @type {{ name: string, url: string }[]} */
 		const images = [];
+		let linkedImages = 0;
 		let droppedImages = 0;
 
 		// Snapshot first: the walk mutates the tree, and a live collection would
@@ -118,7 +120,23 @@
 				const alt = el.getAttribute('alt')?.trim() ?? '';
 				const absolute = absolutize(src, base);
 
-				if (imageMode === 'inline' && absolute) {
+				// No usable source at all: a lazy-loading placeholder, or a data:/blob:
+				// URI absolutize refuses. Keep the alt text, which is often the only
+				// description of a chart or diagram the article depends on.
+				if (!absolute) {
+					droppedImages++;
+					if (alt) {
+						const note = el.ownerDocument.createElement('p');
+						note.className = 'img-alt';
+						note.textContent = alt;
+						el.replaceWith(note);
+					} else {
+						el.remove();
+					}
+					continue;
+				}
+
+				if (imageMode === 'inline') {
 					// The extension only ever re-encodes to WebP, so the name is fixed
 					// here and the worker fills in the bytes. Keeping images as sibling
 					// archive entries (rather than data: URIs) means the preview
@@ -129,17 +147,13 @@
 					continue;
 				}
 
-				// Dropped: keep the alt text, which is often the only description of
-				// a chart or diagram the article depends on.
-				droppedImages++;
-				if (alt) {
-					const note = el.ownerDocument.createElement('p');
-					note.className = 'img-alt';
-					note.textContent = alt;
-					el.replaceWith(note);
-				} else {
-					el.remove();
-				}
+				// Default: keep pointing at the original host. An absolute URL costs a
+				// hundred-odd characters against a link budget an embedded image would
+				// spend tens of thousands on, and the reader still sees the article as
+				// written. The trade is that the capture is no longer self-contained —
+				// it needs the network, and it rots when the host moves the file.
+				linkedImages++;
+				replaceAttrs(el, { src: absolute, alt });
 				continue;
 			}
 
@@ -180,7 +194,7 @@
 			if (el.children.length === 0 && !el.textContent?.trim()) el.remove();
 		}
 
-		return { images, droppedImages };
+		return { images, linkedImages, droppedImages };
 	}
 
 	/**
@@ -238,6 +252,9 @@ hr{border:0;border-top:1px solid var(--rule)}
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Images are usually still hosted by the original site, so opening a capture
+     reaches out to it. One tag, once, is cheaper than a referrerpolicy per img. -->
+<meta name="referrer" content="no-referrer">
 <title>${escapeHtml(title)}</title>
 <style>${READER_CSS}</style>
 </head>
@@ -255,11 +272,11 @@ ${body}
 	/**
 	 * Extract the page. `mode: 'article'` runs Readability; `mode: 'full'` falls
 	 * back to the whole body, for pages Readability can't find an article in.
-	 * @param {{ mode?: 'article' | 'full', images?: 'drop' | 'inline' }} [options]
+	 * @param {{ mode?: 'article' | 'full', images?: 'link' | 'inline' }} [options]
 	 * @returns {Capture}
 	 */
 	function capture(options = {}) {
-		const { mode = 'article', images: imageMode = 'drop' } = options;
+		const { mode = 'article', images: imageMode = 'link' } = options;
 		const base = document.baseURI || location.href;
 		const readerable = LinkifyReadability.isProbablyReaderable(document);
 
@@ -311,7 +328,7 @@ ${body}
 		const root = holder.getElementById('linkify-root');
 		if (!root) throw new Error('Failed to parse the extracted content');
 
-		const { images, droppedImages } = sanitize(root, base, imageMode);
+		const { images, linkedImages, droppedImages } = sanitize(root, base, imageMode);
 
 		const html = buildDocument({
 			title,
@@ -332,6 +349,7 @@ ${body}
 			readerable,
 			mode,
 			images,
+			linkedImages,
 			droppedImages,
 		};
 	}

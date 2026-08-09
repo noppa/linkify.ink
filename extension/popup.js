@@ -98,7 +98,7 @@ function sizeBand(chars) {
 /**
  * @param {{
  *   url: string, chars: number, title: string, mode: string,
- *   droppedImages: number, unfetchedImages: number, inlinedImages: number,
+ *   droppedImages: number, linkedImages: number, inlinedImages: number,
  *   imagesRequested: boolean, imagePermission: boolean,
  * }} result
  */
@@ -117,17 +117,17 @@ function showResult(result) {
 		notes.push('Getting long. Article-only mode produces smaller links than full page.');
 	}
 	if (result.imagesRequested && !result.imagePermission) {
-		notes.push('Images skipped — permission was not granted.');
+		notes.push('Images left on their original host — permission to embed was not granted.');
 	} else if (result.inlinedImages > 0) {
-		notes.push(`${result.inlinedImages} image${plural(result.inlinedImages)} included.`);
-		if (result.unfetchedImages > 0) {
-			notes.push(
-				`${result.unfetchedImages} more couldn't be fetched or didn't fit the size budget.`,
-			);
-		}
-	} else if (result.droppedImages > 0) {
+		notes.push(`${result.inlinedImages} image${plural(result.inlinedImages)} embedded.`);
+	}
+	if (result.linkedImages > 0) {
+		const n = result.linkedImages;
+		notes.push(`${n} image${plural(n)} ${n === 1 ? 'loads' : 'load'} from the original site.`);
+	}
+	if (result.droppedImages > 0) {
 		const n = result.droppedImages;
-		notes.push(`${n} image${plural(n)} dropped (alt text kept).`);
+		notes.push(`${n} image${plural(n)} had no usable source (alt text kept).`);
 	}
 	notesLine.textContent = notes.join(' ');
 	notesLine.hidden = notes.length === 0;
@@ -154,7 +154,7 @@ async function capture() {
 			type: 'capture',
 			options: {
 				mode: modeSelect.value,
-				images: imagesCheckbox.checked ? 'inline' : 'drop',
+				images: imagesCheckbox.checked ? 'inline' : 'link',
 				encryption,
 				password,
 			},
@@ -173,16 +173,18 @@ async function capture() {
 captureButton.addEventListener('click', capture);
 encryptionSelect.addEventListener('change', syncPasswordRow);
 
-// Inlining images means fetching them from whatever hosts the article points at,
-// which needs a host permission the extension deliberately doesn't ask for up
-// front. Request it at the moment the user opts in — this handler runs inside the
-// click, which is the user gesture chrome.permissions.request requires.
+// Embedding images means the worker fetching them from whatever hosts the article
+// points at, which needs a host permission the extension deliberately doesn't ask
+// for up front. Request it at the moment the user opts in — this handler runs
+// inside the click, which is the user gesture chrome.permissions.request requires.
+// Declining is not an error state: the capture still shows its images, just
+// loaded from the original site.
 imagesCheckbox.addEventListener('change', async () => {
 	if (!imagesCheckbox.checked) return;
 	const granted = await chrome.permissions.request({ origins: ['<all_urls>'] });
 	if (!granted) {
 		imagesCheckbox.checked = false;
-		setStatus('Images need permission to read the sites they are hosted on.', 'error');
+		setStatus('Embedding needs permission to read the sites images are hosted on.');
 		return;
 	}
 	setStatus('');
