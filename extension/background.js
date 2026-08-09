@@ -26,12 +26,10 @@ const CAPTURE_FILES = [
 	'content/capture.js',
 ];
 
-// Total re-encoded image bytes allowed in one capture. Images are already
-// compressed, so zstd gains nothing on them and every byte here costs ~1.33
-// characters of URL. 48KB lands a picture-carrying capture around 64,000
-// characters — past the point the site warns about, which is the honest trade for
-// opting in, and the popup says so.
-const IMAGE_BUDGET_BYTES = 48_000;
+// Embedded images are re-encoded, not capped. They're already compressed, so
+// zstd gains nothing and every byte costs ~1.33 characters of URL — but how long
+// a link may get is the user's call, not this extension's. The popup shows the
+// character count and the site handles a truncated link on the way back in.
 /** Longest edge after downscaling. Above this, article images are wasted bytes. */
 const IMAGE_MAX_EDGE = 1280;
 const IMAGE_WEBP_QUALITY = 0.72;
@@ -159,7 +157,10 @@ async function fetchImageAsWebp(url) {
 }
 
 /**
- * Remove one `<img>` from the captured HTML, keeping its alt text.
+ * Point one `<img>` back at its original URL, undoing capture.js's rewrite for an
+ * image that couldn't be fetched or re-encoded. The reader still gets the image
+ * as long as the host serves it — the same place it would have come from had
+ * embedding never been asked for.
  *
  * String surgery rather than a DOM edit because a service worker has no
  * DOMParser — by the time an image turns out to be unfetchable, the markup is
@@ -171,59 +172,60 @@ async function fetchImageAsWebp(url) {
  *
  * @param {string} html
  * @param {string} name the image's archive path, e.g. `assets/img-3.webp`
+ * @param {string} url the original absolute URL to restore
  * @returns {string}
  */
-function removeImage(html, name) {
+function relinkImage(html, name, url) {
 	const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-	const pattern = new RegExp(`<img src="${escapedName}"([^>]*)>`, 'g');
-	return html.replace(pattern, (_match, rest) => {
-		const alt = /alt="([^"]*)"/.exec(rest)?.[1];
-		return alt ? `<p class="img-alt">${alt}</p>` : '';
-	});
+	const pattern = new RegExp(`<img src="${escapedName}"`, 'g');
+	// The URL came from `new URL(...).href`, so it carries no raw `"` to break
+	// out of the attribute; `&` still has to be entity-encoded to stay valid HTML.
+	const escaped = url.replace(/&/g, '&amp;');
+	return html.replace(pattern, `<img src="${escaped}"`);
 }
 
 /**
- * Turn the capture's image references into real archive entries, dropping the
- * ones that fail or don't fit the budget.
+ * Turn the capture's image references into real archive entries, leaving the ones
+ * that fail pointed at their original host.
  * @param {Capture} capture
  * @returns {Promise<{
  *   html: string,
  *   files: { name: string, data: Uint8Array<ArrayBuffer> }[],
  *   inlined: number,
- *   dropped: number,
+ *   relinked: number,
  * }>}
  */
 async function inlineImages(capture) {
 	let html = capture.html;
 	/** @type {{ name: string, data: Uint8Array<ArrayBuffer> }[]} */
 	const files = [];
-	let remaining = IMAGE_BUDGET_BYTES;
-	let dropped = 0;
+	let relinked = 0;
 
-	// Sequential, not parallel: the budget check only means anything if each
-	// image's real encoded size is known before the next one is considered, and
-	// article images are few enough that the latency doesn't matter.
-	for (const image of capture.images) {
-		let data = null;
-		if (remaining > 0) {
+	// Parallel: nothing here depends on what the previous image weighed, and an
+	// article's worth of images against a slow host is otherwise a long wait with
+	// the popup sitting on "Capturing…".
+	const results = await Promise.all(
+		capture.images.map(async (image) => {
 			try {
-				data = await fetchImageAsWebp(image.url);
+				return await fetchImageAsWebp(image.url);
 			} catch (e) {
 				console.warn('[linkify.ink] image failed', image.url, e);
+				return null;
 			}
-		}
+		}),
+	);
 
-		if (!data || data.length > remaining) {
-			html = removeImage(html, image.name);
-			dropped++;
+	for (const [i, image] of capture.images.entries()) {
+		const data = results[i];
+		if (!data) {
+			html = relinkImage(html, image.name, image.url);
+			relinked++;
 			continue;
 		}
-
 		files.push({ name: image.name, data });
-		remaining -= data.length;
 	}
 
-	return { html, files, inlined: files.length, dropped };
+	return { html, files, inlined: files.length, relinked };
 }
 
 /**
@@ -260,12 +262,12 @@ async function captureToLink(options) {
 
 	const capture = await captureTab(tab.id, {
 		mode: options.mode ?? 'article',
-		images: hasImagePermission ? 'inline' : 'drop',
+		images: hasImagePermission ? 'inline' : 'link',
 	});
 
-	const { html, files: imageFiles, inlined, dropped } = capture.images.length
+	const { html, files: imageFiles, inlined, relinked } = capture.images.length
 		? await inlineImages(capture)
-		: { html: capture.html, files: [], inlined: 0, dropped: 0 };
+		: { html: capture.html, files: [], inlined: 0, relinked: 0 };
 
 	/** @type {{ name: string, data: Uint8Array<ArrayBuffer> }[]} */
 	const files = [
@@ -289,12 +291,14 @@ async function captureToLink(options) {
 		title: capture.title,
 		mode: capture.mode,
 		readerable: capture.readerable,
-		// capture.droppedImages counts images the page never offered up (drop mode);
-		// `dropped` counts ones that were wanted but couldn't be fetched or didn't
-		// fit the budget. The popup reports them differently.
-		droppedImages: capture.droppedImages + dropped,
-		unfetchedImages: dropped,
 		inlinedImages: inlined,
+		// Images the reader will fetch from the original host: the ones capture.js
+		// deliberately left alone, plus any the worker wanted to embed and couldn't.
+		linkedImages: capture.linkedImages + relinked,
+		// Only images with no usable source at all — a data: URI, or a lazy-loading
+		// placeholder that never resolved. These are gone; the alt text is all
+		// that's left of them.
+		droppedImages: capture.droppedImages,
 		imagesRequested: wantsImages,
 		imagePermission: hasImagePermission,
 	};

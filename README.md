@@ -43,7 +43,7 @@ Everything runs client-side using web platform primitives:
 
 ## Browser extension
 
-`extension/` holds a Chrome (MV3) extension that turns the page you're reading into a link. It extracts the article with [Readability](https://github.com/mozilla/readability) — the same extractor Firefox Reader Mode uses — writes it as a self-contained `article.html`, and packs it through the same `LinkifyInk` class the site uses. Nothing is uploaded; the extension is just another consumer of the library.
+`extension/` holds a Chrome (MV3) extension that turns the page you're reading into a link. It extracts the article with [Readability](https://github.com/mozilla/readability) — the same extractor Firefox Reader Mode uses — writes it as a standalone `article.html`, and packs it through the same `LinkifyInk` class the site uses. Nothing is uploaded; the extension is just another consumer of the library.
 
 ```sh
 npm run build:extension   # bundles deps and assembles extension/vendor/
@@ -54,7 +54,11 @@ Then load it: `chrome://extensions` → Developer mode → **Load unpacked** →
 The whole design is shaped by URL length. Measured on real prose, a capture ends up at roughly **half the character count of its markup** after zstd — so a typical article lands around 8,000–15,000 characters and a very long one approaches the 32,000 mark where the site starts warning about truncation. Two consequences:
 
 - **Article-only mode is the default.** Full-page capture is available for pages Readability can't parse, but it's much larger.
-- **Images are dropped by default,** keeping their alt text. They're already compressed, so zstd gains nothing and every byte costs ~1.33 characters of URL. The opt-in "include images" toggle re-encodes them to WebP under a 48KB budget and stores them as sibling archive entries (`assets/img-0.webp`), which the preview sandbox serves like any other project file — expect links around 64,000 characters. It requests host permission at the moment you enable it, since inlining means fetching from whatever hosts the article points at.
+- **Images keep their original URLs by default.** An absolute URL costs a hundred-odd characters where the bytes behind it would cost tens of thousands — images are already compressed, so zstd gains nothing on them and every byte costs ~1.33 characters of URL. The reader sees the article as written; the cost is that the capture needs the network and rots if the host moves the file.
+
+Ticking **embed images** makes the capture self-contained instead: each image is re-encoded to WebP (downscaled to 1280px on its longest edge) and stored as a sibling archive entry — `assets/img-0.webp` — which the preview sandbox serves like any other project file. There's no cap on how many or how large; the popup shows the resulting character count, and how long a link is worth sharing is your call. Anything that can't be fetched silently keeps its original URL. Embedding requests host permission at the moment you enable it, since it means fetching from whatever hosts the article points at.
+
+Images with no usable source — a `data:` URI, or a lazy-loading placeholder that never resolved — are the one case that's genuinely dropped, and their alt text is kept in place.
 
 Captured markup is sanitized before it's packed — scripts, styles, embeds and event handlers stripped, attributes reduced to an allowlist, links absolutized. That's defence in depth on top of the preview sandbox, not a replacement for it.
 

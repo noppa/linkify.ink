@@ -5,8 +5,9 @@
 // no exports, and background.js exposes a smoke test for the worker console.
 
 /**
- * What content/capture.js hands back. `html` is the finished, self-contained
- * article.html; `images` is empty unless image inlining was requested, in which
+ * What content/capture.js hands back. `html` is the finished article.html —
+ * self-contained only when images were embedded; otherwise its `<img>` tags point
+ * at the original host. `images` is empty unless embedding was requested, in which
  * case each entry names an archive path the worker still has to fill with bytes.
  */
 export interface Capture {
@@ -19,13 +20,17 @@ export interface Capture {
 	readerable: boolean;
 	mode: 'article' | 'full';
 	images: { name: string; url: string }[];
+	/** Kept in the markup as absolute URLs, to be fetched when the link is read. */
+	linkedImages: number;
+	/** Had no usable source (data:/blob:, or an unresolved placeholder). */
 	droppedImages: number;
 }
 
 export interface CaptureOptions {
 	/** 'article' runs Readability; 'full' falls back to the whole body. */
 	mode?: 'article' | 'full';
-	images?: 'drop' | 'inline';
+	/** 'link' keeps the original URLs; 'inline' packs the bytes into the link. */
+	images?: 'link' | 'inline';
 }
 
 declare global {
