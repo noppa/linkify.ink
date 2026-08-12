@@ -165,10 +165,14 @@ async function fetchImageAsWebp(url) {
  * String surgery rather than a DOM edit because a service worker has no
  * DOMParser — by the time an image turns out to be unfetchable, the markup is
  * already a string and the page may be gone. It is safe here only because the
- * tag being matched is one this extension emitted itself: capture.js writes
- * exactly `<img src="assets/img-N.webp" alt="...">` through the DOM serializer,
- * so the value can't contain a raw `>` and the src is unique per image. Do not
- * reach for this on markup from anywhere else.
+ * value being matched is one this extension minted itself: capture.js assigns
+ * `assets/img-N.webp` through the DOM serializer, so it carries no quote to break
+ * out of the attribute and the index makes it unique within the capture.
+ *
+ * The whole attribute is matched rather than the `<img src="…"` prefix article
+ * mode used to guarantee: full mode keeps the tag's original attributes, so `src`
+ * lands wherever it already was. Anchoring on the tag there would match nothing
+ * and leave the markup pointing at an archive entry that was never written.
  *
  * @param {string} html
  * @param {string} name the image's archive path, e.g. `assets/img-3.webp`
@@ -177,11 +181,11 @@ async function fetchImageAsWebp(url) {
  */
 function relinkImage(html, name, url) {
 	const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-	const pattern = new RegExp(`<img src="${escapedName}"`, 'g');
+	const pattern = new RegExp(`src="${escapedName}"`, 'g');
 	// The URL came from `new URL(...).href`, so it carries no raw `"` to break
 	// out of the attribute; `&` still has to be entity-encoded to stay valid HTML.
 	const escaped = url.replace(/&/g, '&amp;');
-	return html.replace(pattern, `<img src="${escaped}"`);
+	return html.replace(pattern, `src="${escaped}"`);
 }
 
 /**
@@ -278,11 +282,22 @@ async function captureToLink(options) {
 	const { url, chars } = await buildLink(files, {
 		encryption: options.encryption,
 		password: options.password,
-		// Metadata is stored *uncompressed* in the payload, so it is kept to the
-		// one field that earns its bytes: which file to show. Nothing reads it
-		// today — Preview.js already picks the first HTML file — but it makes the
-		// intent explicit for when it does.
-		metadata: { preview: 'article.html' },
+		// Metadata is stored *uncompressed* in the payload, so only fields that
+		// earn their bytes go in. `preview` names the file to show; `nojs: 1` asks
+		// the preview not to run the capture's scripts.
+		//
+		// Set on every capture, not just full-page ones. A captured page is a
+		// snapshot of an already-rendered DOM — running its scripts can only take
+		// it further from what the user saw (hydration against markup React no
+		// longer recognizes, ad loaders re-fetching, analytics firing for a reader
+		// who never visited). Article mode strips scripts anyway, so there the flag
+		// costs eight bytes to say the same thing twice, which is cheaper than
+		// having the guarantee depend on which mode produced the link.
+		//
+		// This is a default, not a boundary: metadata is author-controlled, so a
+		// hostile link can simply omit it. The isolation that actually holds is the
+		// throwaway sandbox origin the preview runs on.
+		metadata: { preview: 'article.html', nojs: 1 },
 	});
 
 	return {

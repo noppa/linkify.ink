@@ -21,15 +21,24 @@ export default function EditorPage() {
 	// hash, or handed off from ReceivePage), before takePendingFiles() consumes
 	// the hand-off slot and the hash effect below clears the URL hash.
 	const [initial] = useState(() => {
-		const pendingFiles = takePendingFiles();
+		const pending = takePendingFiles();
 		const cameFromSharedLink =
-			pendingFiles !== null || window.location.hash.length > 1;
+			pending !== null || window.location.hash.length > 1;
 		return {
-			files: pendingFiles ?? STARTERS[DEFAULT_STARTER].files(),
+			files: pending?.files ?? STARTERS[DEFAULT_STARTER].files(),
+			metadata: pending?.metadata ?? null,
 			cameFromSharedLink,
 		};
 	});
 	const [files, setFiles] = useState(initial.files);
+	// Metadata travels with the link, not with the files, so it survives edits —
+	// a reader who opens a `nojs: 1` capture and tweaks a file keeps the preview's
+	// scripts-off default rather than silently re-enabling them.
+	const [metadata, setMetadata] = useState(
+		/** @type {import('../lib/types.js').Metadata | null} */ (
+			initial.metadata
+		),
+	);
 	const [starter, setStarter] = useState(DEFAULT_STARTER);
 	const [activeIndex, setActiveIndex] = useState(0);
 	// Mobile-only editor/preview tab switcher; defaults to preview for shared links.
@@ -70,7 +79,7 @@ export default function EditorPage() {
 		}
 		window.history.replaceState(null, '', window.location.pathname);
 		linkify.readLink(hash)
-			.then(({ files: decoded }) => {
+			.then(({ files: decoded, metadata: decodedMetadata }) => {
 				setFiles(
 					decoded.map((f) => ({
 						name: f.name,
@@ -78,6 +87,7 @@ export default function EditorPage() {
 						content: f.data,
 					})),
 				);
+				setMetadata(decodedMetadata);
 				setActiveIndex(0);
 			})
 			.catch((e) => {
@@ -140,9 +150,10 @@ export default function EditorPage() {
 		setHashLoading(true);
 		setHashError('');
 		try {
-			const { files: decoded } = await linkify.readLink(hashPending, {
-				password: hashPassword,
-			});
+			const { files: decoded, metadata: decodedMetadata } =
+				await linkify.readLink(hashPending, {
+					password: hashPassword,
+				});
 			setFiles(
 				decoded.map((f) => ({
 					name: f.name,
@@ -150,6 +161,7 @@ export default function EditorPage() {
 					content: f.data,
 				})),
 			);
+			setMetadata(decodedMetadata);
 			setActiveIndex(0);
 			setHashPending(null);
 			setHashPassword('');
@@ -295,7 +307,11 @@ export default function EditorPage() {
 						aria-orientation="horizontal"
 						onMouseDown=${startDrag}
 					></div>
-					<${Preview} files=${files} activeFile=${activeFile} />
+					<${Preview}
+						files=${files}
+						activeFile=${activeFile}
+						metadata=${metadata}
+					/>
 				</div>
 			</div>
 

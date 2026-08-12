@@ -16,6 +16,11 @@
 				new URLSearchParams(location.search).get('parent') ||
 				'https://linkify.ink';
 			let pendingEntry = 'index.html';
+			// Whether the *previewed* document may run scripts. This loader always
+			// runs its own (registering the SW below is the entire preview
+			// mechanism), so the switch lives on the nested content frame instead.
+			let pendingNoJs = false;
+			let appliedNoJs = null;
 			let registration = null;
 			// Bumped on each (re)render so the nested iframe URL always changes and
 			// actually reloads — assigning an unchanged src would be a no-op, so edits
@@ -53,11 +58,35 @@
 			// Render the entry file in a nested iframe so this loader document stays alive
 			// (and keeps the SW registration) for the life of the preview, rather than
 			// navigating itself away with location.replace.
+			//
+			// This nested frame is also where script execution is decided. Sandbox flags
+			// only ever narrow going inward — a nested context cannot grant itself
+			// something its parent withheld — so withholding allow-scripts here is
+			// enforced by the browser, not by cooperation from the content.
+			//
+			// allow-same-origin is not optional: a sandboxed document on an opaque
+			// origin is not controlled by a service worker, and the SW is what serves
+			// every file in the preview. Without it the frame loads nothing at all.
+			// allow-popups keeps target=_blank links clickable (captured articles set it
+			// on every external link), and -to-escape-sandbox means the tab they open is
+			// an ordinary tab rather than another sandboxed one.
+			const CONTENT_SANDBOX = 'allow-same-origin allow-popups allow-popups-to-escape-sandbox';
+
 			function showEntry() {
 				let frame = document.getElementById('content');
+				// Sandbox flags are read at navigation time, and this frame is reused
+				// across edits — so a frame created under the old flags is thrown away
+				// rather than mutated, which keeps the applied flags and the attribute
+				// impossible to disagree.
+				if (frame && appliedNoJs !== pendingNoJs) {
+					frame.remove();
+					frame = null;
+				}
 				if (!frame) {
 					frame = document.createElement('iframe');
 					frame.id = 'content';
+					if (pendingNoJs) frame.setAttribute('sandbox', CONTENT_SANDBOX);
+					appliedNoJs = pendingNoJs;
 					document.body.appendChild(frame);
 				}
 				frame.src = '/' + pendingEntry + '?__preview=' + ++renderCount;
@@ -68,6 +97,7 @@
 				if (event.origin !== PARENT_ORIGIN) return;
 				if (!event.data || event.data.type !== 'files') return;
 				pendingEntry = event.data.entry || 'index.html';
+				pendingNoJs = Boolean(event.data.nojs);
 				// Forward the file map to the SW for fetch interception
 				navigator.serviceWorker.controller?.postMessage({
 					type: 'files',
