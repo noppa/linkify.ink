@@ -17,6 +17,9 @@ export default function ReceivePage() {
 	const [pasteInput, setPasteInput] = useState('');
 	const [password, setPassword] = useState('');
 	const [files, setFiles] = useState(/** @type {FileEntry[] | null} */ (null));
+	const [metadata, setMetadata] = useState(
+		/** @type {import('../lib/types.js').Metadata | null} */ (null),
+	);
 	const [error, setError] = useState('');
 	const [loading, setLoading] = useState(false);
 
@@ -140,6 +143,7 @@ export default function ReceivePage() {
 					content: f.data,
 				})),
 			);
+			setMetadata(result.metadata);
 		} catch (e) {
 			console.error(e);
 			const msg = e instanceof Error ? e.message : String(e);
@@ -159,7 +163,7 @@ export default function ReceivePage() {
 
 	function openInEditor() {
 		if (!files) return;
-		setPendingFiles(files);
+		setPendingFiles(files, metadata);
 		history.pushState(null, '', '/');
 		window.dispatchEvent(new PopStateEvent('popstate'));
 	}

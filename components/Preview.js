@@ -1,5 +1,5 @@
 import { h } from '../libraries.bundle.js';
-import { useEffect, useRef } from '../libraries.bundle.js';
+import { useEffect, useRef, useState } from '../libraries.bundle.js';
 import { htm } from '../libraries.bundle.js';
 import Icon from '../lib/icons.js';
 
@@ -37,6 +37,7 @@ function loadPreviewLibs() {
  *   origin: string,
  *   entry: string,
  *   extra: SyntheticFile | null,
+ *   nojs: boolean,
  *   ready: boolean,
  *   onMessage: (event: MessageEvent) => void,
  * }} Sandbox
@@ -67,11 +68,28 @@ const PREVIEW_ENTRY = '__linkify_preview__.html';
  * @param {{
  *   files: FileEntry[],
  *   activeFile: FileEntry | null,
+ *   metadata?: import('../lib/types.js').Metadata | null,
  * }} props
  */
-export default function Preview({ files, activeFile }) {
+export default function Preview({ files, activeFile, metadata }) {
 	const iframeRef = useRef(/** @type {HTMLIFrameElement | null} */ (null));
 	const sandboxRef = useRef(/** @type {Sandbox | null} */ (null));
+	// Whether to withhold allow-scripts from the previewed document. A link can ask
+	// for this with `nojs: 1` (the browser extension sets it on every capture), but
+	// the reader gets the final say in both directions — metadata is written by
+	// whoever made the link, so it is a sensible default and nothing more. The real
+	// isolation is the throwaway sandbox origin, which applies either way.
+	const [noJs, setNoJs] = useState(Boolean(metadata?.nojs));
+
+	// Metadata lands asynchronously — a link's files are decoded after this
+	// component has already mounted with the editor's starter files — so the
+	// initial state above is usually `false` and this is what actually applies the
+	// link's preference. Keyed on the value rather than the object so a re-render
+	// with an equivalent metadata object doesn't stomp the reader's own choice.
+	const linkNoJs = Boolean(metadata?.nojs);
+	useEffect(() => {
+		setNoJs(linkNoJs);
+	}, [linkNoJs]);
 	// Always-current file list, so the sandbox message handlers (which outlive a
 	// single render) send the latest contents rather than a stale snapshot.
 	const filesRef = useRef(files);
@@ -111,6 +129,7 @@ export default function Preview({ files, activeFile }) {
 		renderPreview(
 			iframeRef.current,
 			previewFile,
+			noJs,
 			filesRef,
 			sandboxRef,
 			() => cancelled,
@@ -120,7 +139,7 @@ export default function Preview({ files, activeFile }) {
 		return () => {
 			cancelled = true;
 		};
-	}, [previewFile, files]);
+	}, [previewFile, files, noJs]);
 
 	// Final teardown on unmount: unregister the sandbox service worker.
 	useEffect(
@@ -130,17 +149,36 @@ export default function Preview({ files, activeFile }) {
 		[],
 	);
 
+	// The outer frame's flags are the ceiling for everything inside it, so they are
+	// deliberately not the place to control scripts. allow-scripts is load-bearing
+	// here: this frame loads sandbox-loader.html, whose script registers the service
+	// worker that serves every previewed file — withhold it and there is no preview
+	// at all. The loader re-applies a narrower set to the nested frame that actually
+	// holds the content. allow-popups is needed for target=_blank links (which
+	// captured articles put on every external link) to do anything when clicked; a
+	// nested frame cannot grant itself what is withheld here.
 	return html`
 		<div class="panel preview-panel">
 			<div class="panel-header">
 				<${Icon} name="eye" /> preview${
 					previewFile ? ` — ${previewFile.name}` : ''
 				}
+				<button
+					class="panel-header-toggle ${noJs ? 'off' : 'on'}"
+					onClick=${() => setNoJs((v) => !v)}
+					title=${
+						noJs
+							? "Scripts are not running in this preview. The link asked for this, or you did — click to run them."
+							: 'Scripts are running in this preview. Click to reload it with scripts disabled.'
+					}
+				>
+					<${Icon} name="code" /> js ${noJs ? 'off' : 'on'}
+				</button>
 			</div>
 			<iframe
 				ref=${iframeRef}
 				class="preview-iframe"
-				sandbox="allow-scripts allow-same-origin"
+				sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
 				title="File preview"
 			></iframe>
 		</div>
@@ -159,11 +197,12 @@ export default function Preview({ files, activeFile }) {
  *
  * @param {HTMLIFrameElement} iframe
  * @param {FileEntry} file
+ * @param {boolean} nojs — withhold allow-scripts from the previewed document
  * @param {{ current: FileEntry[] }} filesRef
  * @param {{ current: Sandbox | null }} sandboxRef
  * @param {() => boolean} isCancelled — true once this render is superseded
  */
-function renderPreview(iframe, file, filesRef, sandboxRef, isCancelled) {
+function renderPreview(iframe, file, nojs, filesRef, sandboxRef, isCancelled) {
 	// TODO: Create utility function getFileExtension
 	const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
 
@@ -171,7 +210,7 @@ function renderPreview(iframe, file, filesRef, sandboxRef, isCancelled) {
 	// Then exhaustively switch case over it instead of using if/else.
 	if (ext === 'html' || ext === 'htm') {
 		// The HTML file is the entry; the SW serves it (and its subresources) as-is.
-		showInSandbox(iframe, file.name, null, filesRef, sandboxRef);
+		showInSandbox(iframe, file.name, null, nojs, filesRef, sandboxRef);
 		return;
 	}
 
@@ -194,6 +233,7 @@ function renderPreview(iframe, file, filesRef, sandboxRef, isCancelled) {
 			iframe,
 			PREVIEW_ENTRY,
 			syntheticFile(doc),
+			nojs,
 			filesRef,
 			sandboxRef,
 		);
@@ -213,6 +253,7 @@ function renderPreview(iframe, file, filesRef, sandboxRef, isCancelled) {
 				iframe,
 				PREVIEW_ENTRY,
 				syntheticFile(doc),
+				nojs,
 				filesRef,
 				sandboxRef,
 			);
@@ -227,6 +268,7 @@ function renderPreview(iframe, file, filesRef, sandboxRef, isCancelled) {
 		iframe,
 		PREVIEW_ENTRY,
 		syntheticFile(doc),
+		nojs,
 		filesRef,
 		sandboxRef,
 	);
@@ -243,19 +285,24 @@ function syntheticFile(htmlSource) {
  * @param {HTMLIFrameElement} iframe
  * @param {string} entry
  * @param {SyntheticFile | null} extra — rendered document to inject, if any
+ * @param {boolean} nojs — withhold allow-scripts from the previewed document
  * @param {{ current: FileEntry[] }} filesRef
  * @param {{ current: Sandbox | null }} sandboxRef
  */
-function showInSandbox(iframe, entry, extra, filesRef, sandboxRef) {
+function showInSandbox(iframe, entry, extra, nojs, filesRef, sandboxRef) {
 	const sandbox = sandboxRef.current;
 	if (sandbox && sandbox.entry === entry) {
 		// Same entry already running — just refresh the injected doc and push files.
+		// Toggling scripts doesn't need a new sandbox: the loader rebuilds the nested
+		// content frame under the new flags, and its service worker registration —
+		// the expensive part to recreate — is unaffected.
 		sandbox.extra = extra;
+		sandbox.nojs = nojs;
 		pushFiles(iframe, sandbox, filesRef);
 	} else {
 		// First render, or the entry changed — (re)create the sandbox.
 		teardownSandbox(iframe, sandboxRef);
-		initSandbox(iframe, entry, extra, filesRef, sandboxRef);
+		initSandbox(iframe, entry, extra, nojs, filesRef, sandboxRef);
 	}
 }
 
@@ -284,10 +331,11 @@ function buildFilesData(files, extra) {
  * @param {HTMLIFrameElement} iframe
  * @param {string} entry
  * @param {SyntheticFile | null} extra
+ * @param {boolean} nojs — withhold allow-scripts from the previewed document
  * @param {{ current: FileEntry[] }} filesRef
  * @param {{ current: Sandbox | null }} sandboxRef
  */
-function initSandbox(iframe, entry, extra, filesRef, sandboxRef) {
+function initSandbox(iframe, entry, extra, nojs, filesRef, sandboxRef) {
 	// Local dev: the sandbox runs on editor port + 1 (see dev-server.mjs), a distinct
 	// origin so its service worker can't hijack the editor. Hosted: a throwaway UUID
 	// subdomain. Either way the origin is fixed for this sandbox's lifetime so we can
@@ -297,7 +345,7 @@ function initSandbox(iframe, entry, extra, filesRef, sandboxRef) {
 		: `${location.protocol}//${location.hostname}:${Number(location.port) + 1}`;
 
 	/** @type {Sandbox} */
-	const sandbox = { origin, entry, extra, ready: false, onMessage: () => {} };
+	const sandbox = { origin, entry, extra, nojs, ready: false, onMessage: () => {} };
 
 	/** @param {MessageEvent} event */
 	sandbox.onMessage = (event) => {
@@ -310,6 +358,7 @@ function initSandbox(iframe, entry, extra, filesRef, sandboxRef) {
 				type: 'files',
 				files: buildFilesData(filesRef.current, sandbox.extra),
 				entry,
+				nojs: sandbox.nojs,
 			},
 			origin,
 		);
@@ -337,6 +386,7 @@ function pushFiles(iframe, sandbox, filesRef) {
 			type: 'files',
 			files: buildFilesData(filesRef.current, sandbox.extra),
 			entry: sandbox.entry,
+			nojs: sandbox.nojs,
 		},
 		sandbox.origin,
 	);

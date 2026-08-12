@@ -111,6 +111,11 @@ function showResult(result) {
 	urlBox.textContent = result.url;
 
 	const notes = [];
+	if (result.mode === 'full') {
+		notes.push(
+			'Full page kept as-is, scripts included — the preview will not run them unless you turn them on.',
+		);
+	}
 	if (result.chars >= SIZE_LIMIT) {
 		notes.push('Over 32,000 characters — some browsers and chat apps may truncate this link.');
 	} else if (result.chars >= SIZE_WARN) {
