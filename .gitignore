@@ -135,3 +135,8 @@ dist/
 
 # Copied into place by build-extension.mjs; sources of truth live at the repo root.
 extension/vendor/
+
+# Playwright test output
+/test-results/
+/playwright-report/
+/blob-report/

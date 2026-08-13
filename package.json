@@ -17,7 +17,7 @@
 		"deploy": "npm run deploy:site && npm run deploy:sandbox",
 		"deploy:site": "npm run build && wrangler deploy -c wrangler.site.toml",
 		"deploy:sandbox": "wrangler deploy -c wrangler.sandbox.toml",
-		"test": "echo \"Error: no test specified\" && exit 1"
+		"test": "playwright test"
 	},
 	"keywords": [],
 	"author": "",
@@ -25,6 +25,7 @@
 	"devDependencies": {
 		"@bokuweb/zstd-wasm": "^0.0.27",
 		"@mozilla/readability": "^0.6.0",
+		"@playwright/test": "^1.62.1",
 		"@types/argon2-browser": "^1.18.4",
 		"@types/chrome": "^0.2.5",
 		"@types/node": "^25.9.2",
