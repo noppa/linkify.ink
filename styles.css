@@ -452,9 +452,34 @@ html, body {
 	background: var(--accent);
 }
 
-/* ── Mobile editor/preview tab bar (hidden on desktop) ── */
+/* ── Editor/preview tab bar (mobile, plus shared links on desktop) ── */
 .mobile-tabs {
 	display: none;
+}
+
+@media (min-width: 641px) {
+	.right.shared-link-view {
+		display: flex;
+		flex-direction: column;
+	}
+
+	.right.shared-link-view .mobile-tabs {
+		display: flex;
+		background: var(--bg2);
+		border-bottom: 1px solid var(--border);
+	}
+
+	.right.shared-link-view .editor-panel,
+	.right.shared-link-view .preview-panel {
+		flex: 1;
+		min-height: 0;
+	}
+
+	.right.shared-link-view .divider-handle,
+	.right.shared-link-view.mobile-tab-editor .preview-panel,
+	.right.shared-link-view.mobile-tab-preview .editor-panel {
+		display: none;
+	}
 }
 
 .mobile-tab {

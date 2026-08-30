@@ -41,12 +41,15 @@ export default function EditorPage() {
 	);
 	const [starter, setStarter] = useState(DEFAULT_STARTER);
 	const [activeIndex, setActiveIndex] = useState(0);
-	// Mobile-only editor/preview tab switcher; defaults to preview for shared links.
+	// Mobile editor/preview tab switcher, also used on desktop for shared links so
+	// recipients see the preview first and opt into editing explicitly.
 	const [mobileTab, setMobileTab] = useState(
 		initial.cameFromSharedLink ? 'preview' : 'editor',
 	);
 	const [showShare, setShowShare] = useState(false);
-	const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+	const [sidebarCollapsed, setSidebarCollapsed] = useState(
+		initial.files.length === 1,
+	);
 	const [hashError, setHashError] = useState('');
 	const [hashPending, setHashPending] = useState(
 		/** @type {string | null} */ (null),
@@ -89,6 +92,7 @@ export default function EditorPage() {
 				);
 				setMetadata(decodedMetadata);
 				setActiveIndex(0);
+				setSidebarCollapsed(decoded.length === 1);
 			})
 			.catch((e) => {
 				console.error(e);
@@ -163,6 +167,7 @@ export default function EditorPage() {
 			);
 			setMetadata(decodedMetadata);
 			setActiveIndex(0);
+			setSidebarCollapsed(decoded.length === 1);
 			setHashPending(null);
 			setHashPassword('');
 		} catch (e) {
@@ -280,7 +285,12 @@ export default function EditorPage() {
 					onToggleCollapse=${() => setSidebarCollapsed((v) => !v)}
 				/>
 
-				<div class="right mobile-tab-${mobileTab}" ref=${rightRef}>
+				<div
+					class="right mobile-tab-${mobileTab} ${initial.cameFromSharedLink
+						? 'shared-link-view'
+						: ''}"
+					ref=${rightRef}
+				>
 					<div class="mobile-tabs">
 						<button
 							class="mobile-tab ${mobileTab === 'editor' ? 'active' : ''}"

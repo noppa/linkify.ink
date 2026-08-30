@@ -6,6 +6,8 @@ test.describe('editor page', () => {
 		await page.goto('/');
 
 		await expect(page.locator('.logo')).toHaveText(/linkify\.ink/);
+		await expect(page.locator('.sidebar')).toHaveClass(/collapsed/);
+		await page.getByRole('button', { name: 'Toggle sidebar' }).click();
 		const fileItem = page.locator('.file-item', { hasText: 'README.md' });
 		await expect(fileItem).toBeVisible();
 		await expect(fileItem).toHaveClass(/active/);
@@ -13,6 +15,7 @@ test.describe('editor page', () => {
 
 	test('can create a new file', async ({ page }) => {
 		await page.goto('/');
+		await page.getByRole('button', { name: 'Toggle sidebar' }).click();
 
 		await page.getByRole('button', { name: 'new' }).click();
 		const input = page.locator('.file-item-rename-input');
@@ -26,6 +29,7 @@ test.describe('editor page', () => {
 
 	test('can delete a file', async ({ page }) => {
 		await page.goto('/');
+		await page.getByRole('button', { name: 'Toggle sidebar' }).click();
 
 		await page.getByRole('button', { name: 'new' }).click();
 		const input = page.locator('.file-item-rename-input');
@@ -40,6 +44,7 @@ test.describe('editor page', () => {
 
 	test('switching starters swaps the file list', async ({ page }) => {
 		await page.goto('/');
+		await page.getByRole('button', { name: 'Toggle sidebar' }).click();
 
 		await page.locator('#starter-select').selectOption('webpage');
 
@@ -52,5 +57,33 @@ test.describe('editor page', () => {
 		await expect(
 			page.locator('.file-item', { hasText: 'script.js' }),
 		).toBeVisible();
+	});
+
+	test('shared links open in preview on desktop and expose the editor separately', async ({
+		page,
+	}) => {
+		await page.goto('/');
+		await page.getByRole('button', { name: 'Share' }).click();
+		await page.getByRole('button', { name: 'Generate link' }).click();
+		const sharedUrl = await page.locator('.modal-url').textContent();
+		expect(sharedUrl).toBeTruthy();
+		const sharedHash = new URL(/** @type {string} */ (sharedUrl)).hash;
+
+		await page.goto(`/${sharedHash}`);
+		// A real recipient opens this in a new document. Reload here because navigating
+		// from the already-mounted editor to its own hash is same-document navigation.
+		await page.reload();
+
+		await expect(page.locator('.right')).toHaveClass(/shared-link-view/);
+		await expect(page.getByRole('button', { name: 'Preview' })).toHaveClass(
+			/active/,
+		);
+		await expect(page.locator('.preview-panel')).toBeVisible();
+		await expect(page.locator('.editor-panel')).toBeHidden();
+		await expect(page.locator('.sidebar')).toHaveClass(/collapsed/);
+
+		await page.getByRole('button', { name: 'Editor' }).click();
+		await expect(page.locator('.editor-panel')).toBeVisible();
+		await expect(page.locator('.preview-panel')).toBeHidden();
 	});
 });
