@@ -113,6 +113,10 @@ export default function Preview({ files, activeFile, metadata }) {
 			files.find(isHtmlFile) ??
 			activeFile;
 	}
+	const isHtmlPreview = Boolean(previewFile && isHtmlFile(previewFile));
+	// Synthetic previews (markdown, text, and image wrappers) never need to run
+	// scripts. Keep that policy separate from the reader's remembered HTML choice.
+	const previewNoJs = isHtmlPreview ? noJs : true;
 
 	// Warm up the preview-only bundle in the background as soon as the preview
 	// mounts, so the first markdown render doesn't wait on a cold fetch.
@@ -129,7 +133,7 @@ export default function Preview({ files, activeFile, metadata }) {
 		renderPreview(
 			iframeRef.current,
 			previewFile,
-			noJs,
+			previewNoJs,
 			filesRef,
 			sandboxRef,
 			() => cancelled,
@@ -139,7 +143,7 @@ export default function Preview({ files, activeFile, metadata }) {
 		return () => {
 			cancelled = true;
 		};
-	}, [previewFile, files, noJs]);
+	}, [previewFile, files, previewNoJs]);
 
 	// Final teardown on unmount: unregister the sandbox service worker.
 	useEffect(
@@ -163,7 +167,8 @@ export default function Preview({ files, activeFile, metadata }) {
 				<${Icon} name="eye" /> preview${
 					previewFile ? ` — ${previewFile.name}` : ''
 				}
-				<button
+				${isHtmlPreview &&
+				html`<button
 					class="panel-header-toggle ${noJs ? 'off' : 'on'}"
 					onClick=${() => setNoJs((v) => !v)}
 					title=${
@@ -173,7 +178,7 @@ export default function Preview({ files, activeFile, metadata }) {
 					}
 				>
 					<${Icon} name="code" /> js ${noJs ? 'off' : 'on'}
-				</button>
+				</button>`}
 			</div>
 			<iframe
 				ref=${iframeRef}
