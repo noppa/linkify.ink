@@ -45,6 +45,11 @@ Everything runs client-side using web platform primitives:
 
 `extension/` holds a Chrome (MV3) extension that turns the page you're reading into a link. It extracts the article with [Readability](https://github.com/mozilla/readability) — the same extractor Firefox Reader Mode uses — writes it as a standalone `article.html`, and packs it through the same `LinkifyInk` class the site uses. Nothing is uploaded; the extension is just another consumer of the library.
 
+Use **Pick an element** when you only need one section of a busy page. It highlights
+the element under the pointer; click to make a link containing that element's exact
+`outerHTML`, or press Escape to cancel. Reopen the popup after choosing it to copy
+or open the finished link.
+
 ```sh
 npm run build:extension   # bundles deps and assembles extension/vendor/
 ```

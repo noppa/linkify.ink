@@ -319,16 +319,189 @@ async function captureToLink(options) {
 	};
 }
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-	if (message?.type !== 'capture') return undefined;
-	captureToLink(message.options ?? {})
-		.then((result) => sendResponse({ ok: true, ...result }))
-		.catch((e) => {
-			console.error('[linkify.ink] capture failed', e);
-			sendResponse({ ok: false, error: e instanceof Error ? e.message : String(e) });
+/** Key for the one picker result waiting for a reopened popup. */
+const ELEMENT_RESULT_KEY = 'elementPickerResult';
+const ELEMENT_OPTIONS_KEY = 'elementPickerOptions';
+
+/**
+ * Turn an element selected in the page into a link. The markup is intentionally
+ * not sanitized or wrapped: this feature promises the selected element's exact
+ * `outerHTML`, rather than a Readability interpretation of it.
+ * @param {{ html: string, title: string }} selection
+ * @param {{ encryption?: 'none' | 'password', password?: string }} options
+ */
+async function elementToLink(selection, options) {
+	const { url, chars } = await buildLink([
+		{ name: 'element.html', data: new TextEncoder().encode(selection.html) },
+	], {
+		encryption: options.encryption,
+		password: options.password,
+		// The selected element can contain scripts and event handlers from the page.
+		// Keep the preview inert, just as page captures are.
+		metadata: { preview: 'element.html', nojs: 1 },
+	});
+
+	return {
+		url,
+		chars,
+		title: selection.title || 'Selected element',
+		mode: 'element',
+		readerable: false,
+		inlinedImages: 0,
+		linkedImages: 0,
+		droppedImages: 0,
+		imagesRequested: false,
+		imagePermission: false,
+	};
+}
+
+/**
+ * Install the temporary page-side picker. It reports the click separately to
+ * the service worker because the popup that started it disappears as soon as
+ * the user clicks back into the tab.
+ * @param {number} tabId
+ */
+async function startElementPicker(tabId) {
+	try {
+		await chrome.scripting.executeScript({
+			target: { tabId },
+			func: () => {
+				// Replacing a previous picker makes the action harmless if the popup is
+				// opened twice before an element is chosen.
+				globalThis.__linkifyInkElementPickerCleanup?.();
+
+				const outline = document.createElement('div');
+				outline.setAttribute('aria-hidden', 'true');
+				outline.style.cssText = [
+					'position:fixed', 'z-index:2147483647', 'pointer-events:none',
+					'border:2px solid #3b82f6', 'background:rgb(59 130 246 / 12%)',
+					'box-shadow:0 0 0 1px white', 'display:none',
+				].join(';');
+				document.documentElement.append(outline);
+
+				const root = document.documentElement;
+				const previousCursor = root.style.getPropertyValue('cursor');
+				const previousCursorPriority = root.style.getPropertyPriority('cursor');
+				root.style.setProperty('cursor', 'crosshair', 'important');
+				/** @type {Element | null} */
+				let hovered = null;
+
+				const show = (target) => {
+					if (!(target instanceof Element)) return;
+					hovered = target;
+					const rect = target.getBoundingClientRect();
+					outline.style.display = 'block';
+					outline.style.left = `${rect.left}px`;
+					outline.style.top = `${rect.top}px`;
+					outline.style.width = `${rect.width}px`;
+					outline.style.height = `${rect.height}px`;
+				};
+
+				const cleanup = () => {
+					document.removeEventListener('pointermove', onPointerMove, true);
+					document.removeEventListener('click', onClick, true);
+					document.removeEventListener('keydown', onKeyDown, true);
+					outline.remove();
+					root.style.setProperty('cursor', previousCursor, previousCursorPriority);
+					if (!previousCursor) root.style.removeProperty('cursor');
+					delete globalThis.__linkifyInkElementPickerCleanup;
+				};
+
+				const onPointerMove = (event) => show(event.target);
+				const onClick = (event) => {
+					const selected = event.target instanceof Element ? event.target : hovered;
+					if (event.button !== 0 || !selected) return;
+					event.preventDefault();
+					event.stopImmediatePropagation();
+					const tag = selected.tagName.toLowerCase();
+					const title = document.title || `<${tag}>`;
+					const html = selected.outerHTML;
+					cleanup();
+					chrome.runtime.sendMessage({ type: 'element-picked', selection: { html, title } });
+				};
+				const onKeyDown = (event) => {
+					if (event.key !== 'Escape') return;
+					event.preventDefault();
+					event.stopImmediatePropagation();
+					cleanup();
+					chrome.runtime.sendMessage({ type: 'element-pick-cancelled' });
+				};
+
+				globalThis.__linkifyInkElementPickerCleanup = cleanup;
+				document.addEventListener('pointermove', onPointerMove, true);
+				document.addEventListener('click', onClick, true);
+				document.addEventListener('keydown', onKeyDown, true);
+				return true;
+			},
 		});
-	// Keeps the message channel open for the async response above.
-	return true;
+	} catch (e) {
+		throw new Error(`Can't read this page (${e instanceof Error ? e.message : String(e)}).`);
+	}
+}
+
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+	if (message?.type === 'capture') {
+		captureToLink(message.options ?? {})
+			.then((result) => sendResponse({ ok: true, ...result }))
+			.catch((e) => {
+				console.error('[linkify.ink] capture failed', e);
+				sendResponse({ ok: false, error: e instanceof Error ? e.message : String(e) });
+			});
+		return true;
+	}
+
+	if (message?.type === 'pick-element') {
+		// Keep the encryption choice in extension storage, rather than putting a
+		// password into the page-side picker message. It also survives the popup
+		// closing while the user returns to the page.
+		chrome.storage.session.set({ [ELEMENT_OPTIONS_KEY]: message.options ?? {} })
+			.then(() => chrome.tabs.query({ active: true, currentWindow: true }))
+			.then(([tab]) => {
+				if (!tab?.id) throw new Error('No active tab.');
+				return startElementPicker(tab.id);
+			})
+			.then(() => sendResponse({ ok: true }))
+			.catch((e) => chrome.storage.session.remove(ELEMENT_OPTIONS_KEY).then(() => {
+				sendResponse({ ok: false, error: e instanceof Error ? e.message : String(e) });
+			}));
+		return true;
+	}
+
+	if (message?.type === 'element-picked') {
+		chrome.storage.session.get(ELEMENT_OPTIONS_KEY)
+			.then((stored) => {
+				const options = stored[ELEMENT_OPTIONS_KEY] ?? {};
+				return chrome.storage.session.remove(ELEMENT_OPTIONS_KEY).then(() => options);
+			})
+			.then((options) => elementToLink(message.selection, options))
+			.then((result) => chrome.storage.session.set({ [ELEMENT_RESULT_KEY]: { result } }))
+			.catch((e) => chrome.storage.session.set({
+				[ELEMENT_RESULT_KEY]: { error: e instanceof Error ? e.message : String(e) },
+			}));
+		sendResponse({ ok: true });
+		return undefined;
+	}
+
+	if (message?.type === 'element-pick-cancelled') {
+		chrome.storage.session.remove(ELEMENT_OPTIONS_KEY).then(() =>
+			chrome.storage.session.set({ [ELEMENT_RESULT_KEY]: { error: 'Element selection cancelled.' } }),
+		);
+		sendResponse({ ok: true });
+		return undefined;
+	}
+
+	if (message?.type === 'take-element-result') {
+		chrome.storage.session.get(ELEMENT_RESULT_KEY)
+			.then((stored) => {
+				const value = stored[ELEMENT_RESULT_KEY];
+				return chrome.storage.session.remove(ELEMENT_RESULT_KEY).then(() => value);
+			})
+			.then((value) => sendResponse(value ? { ok: true, ...value } : { ok: true }))
+			.catch((e) => sendResponse({ ok: false, error: e instanceof Error ? e.message : String(e) }));
+		return true;
+	}
+
+	return undefined;
 });
 
 // Exposed for the service worker console: `await __linkifySmokeTest()`. This is

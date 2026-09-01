@@ -34,6 +34,11 @@ export interface CaptureOptions {
 }
 
 declare global {
+	/** Temporary cleanup hook installed by the page element picker. */
+	var __linkifyInkElementPickerCleanup: (() => void) | undefined;
+}
+
+declare global {
 	/** Defined by content/capture.js once injected into a page. */
 	var __linkifyInkCapture: (options?: CaptureOptions) => Capture;
 	/** Defined by background.js; for manual use from the worker's console. */

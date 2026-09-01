@@ -16,6 +16,7 @@ const passwordRow = el('password-row');
 const imagesCheckbox = /** @type {HTMLInputElement} */ (el('images'));
 const passwordInput = /** @type {HTMLInputElement} */ (el('password'));
 const captureButton = /** @type {HTMLButtonElement} */ (el('capture'));
+const pickElementButton = /** @type {HTMLButtonElement} */ (el('pick-element'));
 const statusLine = el('status');
 const resultSection = el('result');
 const titleLabel = el('title');
@@ -175,7 +176,53 @@ async function capture() {
 	}
 }
 
+// A popup closes as soon as the user returns to the page to click an element.
+// The worker saves the completed result in session storage, and restoreElementResult
+// picks it up when the user opens the popup again.
+async function pickElement() {
+	const encryption = /** @type {'none' | 'password'} */ (encryptionSelect.value);
+	const password = passwordInput.value;
+
+	if (encryption === 'password' && !password) {
+		setStatus('Enter a password first.', 'error');
+		return;
+	}
+
+	pickElementButton.disabled = true;
+	resultSection.hidden = true;
+	setStatus('Return to the page, then click the element to capture. Press Escape to cancel.');
+	await saveSettings();
+
+	try {
+		const response = await chrome.runtime.sendMessage({
+			type: 'pick-element',
+			options: { encryption, password },
+		});
+		if (!response?.ok) throw new Error(response?.error ?? 'Could not start the element picker.');
+	} catch (e) {
+		setStatus(e instanceof Error ? e.message : String(e), 'error');
+		pickElementButton.disabled = false;
+	}
+}
+
+async function restoreElementResult() {
+	try {
+		const response = await chrome.runtime.sendMessage({ type: 'take-element-result' });
+		if (!response) return;
+		if (response.ok && response.result) {
+			setStatus('');
+			showResult(response.result);
+		} else if (response.error) {
+			setStatus(response.error, 'error');
+		}
+	} catch {
+		// The picker result is a convenience only; an unavailable worker should not
+		// prevent the normal capture UI from opening.
+	}
+}
+
 captureButton.addEventListener('click', capture);
+pickElementButton.addEventListener('click', pickElement);
 encryptionSelect.addEventListener('change', syncPasswordRow);
 
 // Embedding images means the worker fetching them from whatever hosts the article
@@ -209,3 +256,4 @@ openButton.addEventListener('click', () => {
 });
 
 restoreSettings();
+restoreElementResult();
