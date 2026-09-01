@@ -452,32 +452,27 @@ html, body {
 	background: var(--accent);
 }
 
-/* ── Editor/preview tab bar (mobile, plus shared links on desktop) ── */
+/* ── Mobile editor/preview tab bar ── */
 .mobile-tabs {
 	display: none;
 }
 
 @media (min-width: 641px) {
-	.right.shared-link-view {
+	/* A shared link starts as a reader view. Opening its editor removes this class
+	   and returns to the regular side-by-side workspace. */
+	.right.shared-link-preview {
 		display: flex;
 		flex-direction: column;
 	}
 
-	.right.shared-link-view .mobile-tabs {
-		display: flex;
-		background: var(--bg2);
-		border-bottom: 1px solid var(--border);
-	}
-
-	.right.shared-link-view .editor-panel,
-	.right.shared-link-view .preview-panel {
+	.right.shared-link-preview .preview-panel {
 		flex: 1;
 		min-height: 0;
 	}
 
-	.right.shared-link-view .divider-handle,
-	.right.shared-link-view.mobile-tab-editor .preview-panel,
-	.right.shared-link-view.mobile-tab-preview .editor-panel {
+	.right.shared-link-preview .mobile-tabs,
+	.right.shared-link-preview .editor-panel,
+	.right.shared-link-preview .divider-handle {
 		display: none;
 	}
 }
@@ -730,6 +725,10 @@ html, body {
 
 /* ── Mobile ── */
 @media (max-width: 640px) {
+	.open-editor-btn {
+		display: none;
+	}
+
 	.main {
 		grid-template-columns: 1fr;
 		grid-template-rows: auto 1fr;

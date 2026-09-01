@@ -41,11 +41,13 @@ export default function EditorPage() {
 	);
 	const [starter, setStarter] = useState(DEFAULT_STARTER);
 	const [activeIndex, setActiveIndex] = useState(0);
-	// Mobile editor/preview tab switcher, also used on desktop for shared links so
-	// recipients see the preview first and opt into editing explicitly.
+	// Mobile-only editor/preview tab switcher; shared links start on the preview.
 	const [mobileTab, setMobileTab] = useState(
 		initial.cameFromSharedLink ? 'preview' : 'editor',
 	);
+	// On desktop a shared link first shows only its preview. Opening the editor
+	// restores the normal side-by-side editor/preview workspace.
+	const [sharedEditorOpen, setSharedEditorOpen] = useState(false);
 	const [showShare, setShowShare] = useState(false);
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(
 		initial.files.length === 1,
@@ -243,6 +245,8 @@ export default function EditorPage() {
 	}
 
 	const activeFile = files[activeIndex] ?? null;
+	const showSharedPreviewOnly =
+		initial.cameFromSharedLink && !sharedEditorOpen;
 
 	return html`
 		<div class="app">
@@ -252,6 +256,13 @@ export default function EditorPage() {
 					linkify.ink
 				</a>
 				<div class="topbar-actions">
+					${showSharedPreviewOnly &&
+					html`<button
+						class="btn open-editor-btn"
+						onClick=${() => setSharedEditorOpen(true)}
+					>
+						<${Icon} name="pencil" /> Open editor
+					</button>`}
 					<button class="btn" onClick=${() => downloadFiles(files)}>
 						<${Icon} name="download" /> Download
 					</button>
@@ -286,8 +297,8 @@ export default function EditorPage() {
 				/>
 
 				<div
-					class="right mobile-tab-${mobileTab} ${initial.cameFromSharedLink
-						? 'shared-link-view'
+					class="right mobile-tab-${mobileTab} ${showSharedPreviewOnly
+						? 'shared-link-preview'
 						: ''}"
 					ref=${rightRef}
 				>

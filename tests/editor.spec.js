@@ -59,7 +59,7 @@ test.describe('editor page', () => {
 		).toBeVisible();
 	});
 
-	test('shared links open in preview on desktop and expose the editor separately', async ({
+	test('shared links open in preview on desktop and can open the full workspace', async ({
 		page,
 	}) => {
 		await page.goto('/');
@@ -74,16 +74,15 @@ test.describe('editor page', () => {
 		// from the already-mounted editor to its own hash is same-document navigation.
 		await page.reload();
 
-		await expect(page.locator('.right')).toHaveClass(/shared-link-view/);
-		await expect(page.getByRole('button', { name: 'Preview' })).toHaveClass(
-			/active/,
-		);
+		await expect(page.locator('.right')).toHaveClass(/shared-link-preview/);
 		await expect(page.locator('.preview-panel')).toBeVisible();
 		await expect(page.locator('.editor-panel')).toBeHidden();
 		await expect(page.locator('.sidebar')).toHaveClass(/collapsed/);
 
-		await page.getByRole('button', { name: 'Editor' }).click();
+		await page.getByRole('button', { name: 'Open editor' }).click();
+		await expect(page.locator('.right')).not.toHaveClass(/shared-link-preview/);
 		await expect(page.locator('.editor-panel')).toBeVisible();
-		await expect(page.locator('.preview-panel')).toBeHidden();
+		await expect(page.locator('.preview-panel')).toBeVisible();
+		await expect(page.locator('.divider-handle')).toBeVisible();
 	});
 });
