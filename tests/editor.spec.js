@@ -27,6 +27,24 @@ test.describe('editor page', () => {
 		).toBeVisible();
 	});
 
+	test('uploading a file replaces the untouched default README', async ({ page }) => {
+		await page.goto('/');
+		await page.getByRole('button', { name: 'Toggle sidebar' }).click();
+
+		await page.locator('input[type="file"]').setInputFiles({
+			name: 'upload.txt',
+			mimeType: 'text/plain',
+			buffer: Buffer.from('uploaded'),
+		});
+
+		await expect(
+			page.locator('.file-item', { hasText: 'upload.txt' }),
+		).toBeVisible();
+		await expect(page.locator('.file-item', { hasText: 'README.md' })).toHaveCount(
+			0,
+		);
+	});
+
 	test('can delete a file', async ({ page }) => {
 		await page.goto('/');
 		await page.getByRole('button', { name: 'Toggle sidebar' }).click();

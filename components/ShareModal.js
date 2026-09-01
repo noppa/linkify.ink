@@ -12,9 +12,10 @@ const html = htm.bind(h);
  * @param {{
  *   files: FileEntry[],
  *   onClose: () => void,
+ *   onGenerated?: () => void,
  * }} props
  */
-export default function ShareModal({ files, onClose }) {
+export default function ShareModal({ files, onClose, onGenerated }) {
 	const [encryption, setEncryption] = useState(
 		/** @type {'none' | 'password' | 'ecdh'} */ ('none'),
 	);
@@ -48,6 +49,7 @@ export default function ShareModal({ files, onClose }) {
 				opts,
 			);
 			setUrl(result);
+			onGenerated?.();
 		} catch (e) {
 			console.error(e);
 			setError(e instanceof Error ? e.message : String(e));

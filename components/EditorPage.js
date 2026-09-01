@@ -16,6 +16,16 @@ const html = htm.bind(h);
 
 /** @typedef {import('../lib/types.js').FileEntry} FileEntry */
 
+/** @param {FileEntry[]} files */
+function isDefaultReadmeOnly(files) {
+	return (
+		files.length === 1 &&
+		files[0].name === 'README.md' &&
+		files[0].type === 'text/markdown' &&
+		files[0].content.length === 0
+	);
+}
+
 export default function EditorPage() {
 	// Captured once on mount: whether these files arrived via a shared link (URL
 	// hash, or handed off from ReceivePage), before takePendingFiles() consumes
@@ -64,6 +74,11 @@ export default function EditorPage() {
 	const rightRef = useRef(/** @type {HTMLDivElement | null} */ (null));
 	const dragging = useRef(false);
 	const dirty = useRef(false);
+	// Generating a link clears the unload warning, but does not make the blank
+	// initial README user-authored.
+	const defaultReadmeUntouched = useRef(
+		!initial.cameFromSharedLink && isDefaultReadmeOnly(initial.files),
+	);
 	console.log('EditorPage render');
 
 	// Decode files from URL hash on first load
@@ -95,6 +110,7 @@ export default function EditorPage() {
 				setMetadata(decodedMetadata);
 				setActiveIndex(0);
 				setSidebarCollapsed(decoded.length === 1);
+				defaultReadmeUntouched.current = false;
 			})
 			.catch((e) => {
 				console.error(e);
@@ -170,6 +186,7 @@ export default function EditorPage() {
 			setMetadata(decodedMetadata);
 			setActiveIndex(0);
 			setSidebarCollapsed(decoded.length === 1);
+			defaultReadmeUntouched.current = false;
 			setHashPending(null);
 			setHashPassword('');
 		} catch (e) {
@@ -195,6 +212,7 @@ export default function EditorPage() {
 			return;
 		}
 		dirty.current = false;
+		defaultReadmeUntouched.current = key === DEFAULT_STARTER;
 		setFiles(choice.files());
 		setStarter(key);
 		setActiveIndex(0);
@@ -202,6 +220,7 @@ export default function EditorPage() {
 
 	function updateFile(index, content) {
 		dirty.current = true;
+		defaultReadmeUntouched.current = false;
 		setFiles((prev) =>
 			prev.map((f, i) => (i === index ? { ...f, content } : f)),
 		);
@@ -209,6 +228,7 @@ export default function EditorPage() {
 
 	function replaceFile(index, newFile) {
 		dirty.current = true;
+		defaultReadmeUntouched.current = false;
 		setFiles((prev) => prev.map((f, i) => (i === index ? newFile : f)));
 	}
 
@@ -217,16 +237,22 @@ export default function EditorPage() {
 		setFiles((prev) => {
 			const existing = new Set(prev.map((f) => f.name));
 			const toAdd = newFiles.filter((f) => !existing.has(f.name));
+			const removeDefaultReadme =
+				defaultReadmeUntouched.current &&
+				isDefaultReadmeOnly(prev) &&
+				toAdd.length > 0;
 			const updated = prev.map((f) => {
 				const replacement = newFiles.find((n) => n.name === f.name);
 				return replacement || f;
 			});
-			return [...updated, ...toAdd];
+			if (toAdd.length > 0) defaultReadmeUntouched.current = false;
+			return [...(removeDefaultReadme ? [] : updated), ...toAdd];
 		});
 	}
 
 	function renameFile(index, newName) {
 		dirty.current = true;
+		defaultReadmeUntouched.current = false;
 		setFiles((prev) =>
 			prev.map((f, i) =>
 				i === index ? { ...f, name: newName, type: guessType(newName) } : f,
@@ -236,6 +262,7 @@ export default function EditorPage() {
 
 	function deleteFile(index) {
 		dirty.current = true;
+		defaultReadmeUntouched.current = false;
 		setFiles((prev) => {
 			const next = prev.filter((_, i) => i !== index);
 			if (activeIndex >= next.length)
@@ -338,7 +365,13 @@ export default function EditorPage() {
 
 			${showShare &&
 			html`
-				<${ShareModal} files=${files} onClose=${() => setShowShare(false)} />
+				<${ShareModal}
+					files=${files}
+					onClose=${() => setShowShare(false)}
+					onGenerated=${() => {
+						dirty.current = false;
+					}}
+				/>
 			`}
 			${hashPending &&
 			html`

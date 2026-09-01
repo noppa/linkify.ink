@@ -136,6 +136,14 @@ function ImageViewer({ file, onReplace }) {
 	const canDownscale =
 		!dims || Math.min(dims.width, dims.height) * DOWNSCALE_FACTOR > MIN_DIMENSION;
 	const canRestore = file !== original;
+	// Uploads without a MIME type are stored as application/octet-stream; use the
+	// filename in that case so a .webp/.avif still hides its own conversion action.
+	const sourceType = file.type.startsWith('image/')
+		? file.type
+		: guessType(file.name, 'image/png');
+	const canConvertToWebp = sourceType !== 'image/webp';
+	const canConvertToAvif = avifSupported && sourceType !== 'image/avif';
+	const hasFormatConversion = canConvertToWebp || canConvertToAvif;
 
 	return html`
 		<div class="panel editor-panel">
@@ -171,25 +179,27 @@ function ImageViewer({ file, onReplace }) {
 						>
 							Restore original
 						</button>
-						<span class="editor-image-hint"
-							>Lossy recompression (renames file):</span
-						>
-						<button
-							class="btn"
-							onClick=${() => convert('image/webp')}
-							disabled=${processing}
-						>
-							Convert to WebP
-						</button>
-						${avifSupported &&
+						${hasFormatConversion &&
 						html`
-							<button
-								class="btn"
-								onClick=${() => convert('image/avif')}
-								disabled=${processing}
+							<span class="editor-image-hint"
+								>Lossy recompression (renames file):</span
 							>
-								Convert to AVIF
-							</button>
+							${canConvertToWebp &&
+								html`<button
+									class="btn"
+									onClick=${() => convert('image/webp')}
+									disabled=${processing}
+								>
+									Convert to WebP
+								</button>`}
+							${canConvertToAvif &&
+								html`<button
+									class="btn"
+									onClick=${() => convert('image/avif')}
+									disabled=${processing}
+								>
+									Convert to AVIF
+								</button>`}
 						`}
 					</div>
 				`}
