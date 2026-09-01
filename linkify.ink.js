@@ -547,7 +547,9 @@ function tarPack(files) {
 		header.set(numToOctal(0, 8), 108); // uid
 		header.set(numToOctal(0, 8), 116); // gid
 		header.set(numToOctal(file.data.length, 12), 124); // size
-		header.set(numToOctal(Math.floor(Date.now() / 1000), 12), 136); // mtime
+		// Archive metadata is part of the URL payload. A fixed mtime keeps public
+		// links reproducible when the file names and bytes have not changed.
+		header.set(numToOctal(0, 12), 136); // mtime
 		header[156] = 48; // typeflag '0' = regular file
 		header.set(strToField('ustar', 6), 257); // magic
 		header.set(strToField('00', 2), 263); // version
