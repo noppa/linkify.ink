@@ -1,0 +1,51 @@
+Prompt:
+
+  I'm interested in the possibility of improving compression ratio of our links with zstd shared dictionary compression.
+  We should start by doing some testing on the viability of this, without baking it into the actual code yet.
+  Here's where I'd like to start. Let's download/scrape something like 10 wikipedia pages per language, of e.g. 100 most spoken languages, or
+  something like that. Then train a zstd dictionary from it.
+  Then generate a sample english text file, and compress it a) with zstd max compression ratio and b) with our dictionary.
+  See if that provides any benefits.
+  We can do it here on the cli of this machine, no need to bake it into our JS lib yet.
+
+Results:
+
+• The experiment shows a real but modest benefit from a shared zstd dictionary.
+
+   English input    No dictionary    64 KiB dictionary          Savings
+  ━━━━━━━━━━━━━━━  ━━━━━━━━━━━━━━━  ━━━━━━━━━━━━━━━━━━━  ━━━━━━━━━━━━━━━
+           1 KiB            589 B                578 B     11 B / 1.87%
+  ───────────────  ───────────────  ───────────────────  ───────────────
+           4 KiB          2,027 B              2,003 B     24 B / 1.18%
+  ───────────────  ───────────────  ───────────────────  ───────────────
+          16 KiB          7,562 B              7,443 B    119 B / 1.57%
+  ───────────────  ───────────────  ───────────────────  ───────────────
+          32 KiB         14,306 B             14,115 B    191 B / 1.34%
+
+  Levels 19 and maximum --ultra -22 produced identical sizes for these small payloads. For the 32 KiB sample, the dictionary improves the ratio
+  from 2.2905 to 2.3215 and saves approximately 255 base64url characters.
+
+  Corpus details:
+
+  - 100 Wikipedia language editions attempted; 99 succeeded.
+  - 923 manifest-listed article introductions.
+  - 775,450 bytes of training data.
+  - Independent 32 KiB English holdout assembled from different articles.
+  - 65,536-byte fastCover dictionary.
+  - Dictionary-compressed frames were successfully verified by zstd.
+  - No repository files were changed.
+
+  Artifacts:
+
+  - Benchmark results (/tmp/linkify-zstd-experiment/results.tsv)
+  - Dictionary (/tmp/linkify-zstd-experiment/wikipedia-100lang-64k.dict)
+  - English sample (/tmp/linkify-zstd-experiment/sample-english.txt)
+  - Corpus manifest (/tmp/linkify-zstd-experiment/manifest.json)
+  - Benchmark script (/tmp/linkify-zstd-experiment/run_benchmark.sh)
+  - Corpus fetcher (/tmp/linkify-zstd-experiment/fetch_corpus.py)
+
+  My take: this establishes viability, but not yet a compelling production win. The dictionary costs 64 KiB once in the application—not per link—
+  but adds versioning and decoder coupling. The next useful experiment would train on actual Linkify tar payloads/Readability HTML and benchmark
+  hundreds of held-out captures. That should be substantially more representative and may exploit recurring tar headers, HTML structure,
+  attributes, and metadata better than plain Wikipedia prose.
+
