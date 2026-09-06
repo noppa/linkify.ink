@@ -9,7 +9,7 @@ This makes it a natural fit for the kind of small, ephemeral sharing that usuall
 ## Features
 
 - **In-browser editor** — create and edit files in a multi-file editor with a sidebar, or drop in existing files from disk. Text, images, and binary files are all supported.
-- **Live preview** — markdown, images, and even multi-file HTML/CSS/JS projects render in a sandboxed preview pane. Web projects run in an isolated iframe on a separate origin, served by a service worker that maps requests back to your in-memory files.
+- **Live preview** — markdown (including fenced Mermaid diagrams), standalone Mermaid files, images, and even multi-file HTML/CSS/JS projects render in a sandboxed preview pane. Web projects run in an isolated iframe on a separate origin, served by a service worker that maps requests back to your in-memory files.
 - **Three sharing modes:**
   - **Public** — a plain link; anyone who has it can open it.
   - **Password** — the payload is encrypted with AES-256-GCM, using a key derived from your password with Argon2id.

@@ -246,23 +246,65 @@ function renderPreview(iframe, file, nojs, filesRef, sandboxRef, isCancelled) {
 	}
 
 	if (ext === 'md') {
-		// The markdown renderer lives in the lazy preview bundle; wait for it,
-		// then bail if a newer render has superseded this one.
-		loadPreviewLibs().then(({ marked }) => {
-			if (isCancelled()) return;
-			const rendered = /** @type {string} */ (
-				marked.parse(new TextDecoder().decode(file.content))
-			);
-			const doc = `<!doctype html><html><head><meta charset="utf-8"></head><body style="font-family:sans-serif;padding:16px;max-width:720px">${rendered}</body></html>`;
+		// Marked and Mermaid live in the lazy preview bundle. Mermaid fences are
+		// rendered to static SVG before this document enters the scripts-off iframe.
+		loadPreviewLibs()
+			.then(({ renderMarkdown }) =>
+				renderMarkdown(new TextDecoder().decode(file.content)),
+			)
+			.then((rendered) => {
+				if (isCancelled()) return;
+				showInSandbox(
+					iframe,
+					PREVIEW_ENTRY,
+					syntheticFile(previewDocument(rendered, 'markdown-preview')),
+					nojs,
+					filesRef,
+					sandboxRef,
+				);
+			})
+			.catch((error) => {
+				if (isCancelled()) return;
+				showPreviewError(iframe, error, nojs, filesRef, sandboxRef);
+			});
+		return;
+	}
+
+	if (ext === 'mermaid' || ext === 'mmd') {
+		const source = new TextDecoder().decode(file.content);
+		if (!source.trim()) {
 			showInSandbox(
 				iframe,
 				PREVIEW_ENTRY,
-				syntheticFile(doc),
+				syntheticFile(previewDocument('', 'mermaid-preview')),
 				nojs,
 				filesRef,
 				sandboxRef,
 			);
-		});
+			return;
+		}
+		loadPreviewLibs()
+			.then(({ renderMermaid }) => renderMermaid(source))
+			.then((rendered) => {
+				if (isCancelled()) return;
+				showInSandbox(
+					iframe,
+					PREVIEW_ENTRY,
+					syntheticFile(
+						previewDocument(
+							`<div class="mermaid-diagram">${rendered}</div>`,
+							'mermaid-preview',
+						),
+					),
+					nojs,
+					filesRef,
+					sandboxRef,
+				);
+			})
+			.catch((error) => {
+				if (isCancelled()) return;
+				showPreviewError(iframe, error, nojs, filesRef, sandboxRef);
+			});
 		return;
 	}
 
@@ -282,6 +324,44 @@ function renderPreview(iframe, file, nojs, filesRef, sandboxRef, isCancelled) {
 /** @param {string} htmlSource @returns {SyntheticFile} */
 function syntheticFile(htmlSource) {
 	return { name: PREVIEW_ENTRY, content: new TextEncoder().encode(htmlSource) };
+}
+
+const PREVIEW_STYLES = `
+html { color-scheme: light; }
+body { box-sizing: border-box; margin: 0; padding: 16px; font-family: sans-serif; color: #24292f; }
+.markdown-preview { max-width: 720px; }
+.mermaid-preview { min-height: calc(100vh - 32px); display: grid; place-items: center; }
+.mermaid-diagram { margin: 16px 0; overflow: auto; text-align: center; }
+.mermaid-diagram:first-child { margin-top: 0; }
+.mermaid-diagram:last-child { margin-bottom: 0; }
+.mermaid-diagram svg { display: inline-block; max-width: 100%; height: auto; }
+.mermaid-error { padding: 12px; border: 1px solid #cf222e; border-radius: 6px; background: #ffebe9; color: #82071e; text-align: left; }
+.mermaid-error pre { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.45 monospace; }
+`;
+
+/** @param {string} body @param {string} className */
+function previewDocument(body, className) {
+	return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>${PREVIEW_STYLES}</style></head><body class="${className}">${body}</body></html>`;
+}
+
+/**
+ * @param {HTMLIFrameElement} iframe
+ * @param {unknown} error
+ * @param {boolean} nojs
+ * @param {{ current: FileEntry[] }} filesRef
+ * @param {{ current: Sandbox | null }} sandboxRef
+ */
+function showPreviewError(iframe, error, nojs, filesRef, sandboxRef) {
+	const message = escapeHtml(error instanceof Error ? error.message : String(error));
+	const body = `<div class="mermaid-error" role="alert"><strong>Could not render Mermaid diagram</strong><pre>${message}</pre></div>`;
+	showInSandbox(
+		iframe,
+		PREVIEW_ENTRY,
+		syntheticFile(previewDocument(body, 'mermaid-preview')),
+		nojs,
+		filesRef,
+		sandboxRef,
+	);
 }
 
 /**

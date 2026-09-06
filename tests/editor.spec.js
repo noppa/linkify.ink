@@ -77,6 +77,45 @@ test.describe('editor page', () => {
 		).toBeVisible();
 	});
 
+	test('renders Mermaid diagrams in Markdown and standalone files', async ({
+		page,
+	}) => {
+		await page.goto('/');
+		await page.locator('.editor-textarea').fill(
+			'# Diagram\n\n```mermaid\nflowchart LR\n  Start --> Finish\n```',
+		);
+		await page.locator('.editor-textarea').blur();
+
+		const preview = page
+			.locator('.preview-iframe')
+			.contentFrame()
+			.locator('iframe')
+			.contentFrame();
+		await expect(preview.getByRole('heading', { name: 'Diagram' })).toBeVisible();
+		await expect(preview.locator('.mermaid-diagram svg')).toBeVisible();
+		await expect(preview.locator('.mermaid-diagram')).toContainText('Start');
+		await expect(preview.locator('code.language-mermaid')).toHaveCount(0);
+
+		await page.getByRole('button', { name: 'Toggle sidebar' }).click();
+		await page.getByRole('button', { name: 'new' }).click();
+		await page.locator('.file-item-rename-input').fill('flow.mmd');
+		await page.locator('.file-item-rename-input').press('Enter');
+		await page.locator('.file-item', { hasText: 'flow.mmd' }).click();
+		await expect(page.locator('.editor-panel .panel-header')).toContainText(
+			'flow.mmd',
+		);
+		await page
+			.locator('.editor-textarea')
+			.fill('sequenceDiagram\n  Alice->>Bob: Hello');
+		await page.locator('.editor-textarea').blur();
+
+		await expect(page.locator('.panel-header', { hasText: 'flow.mmd' })).toHaveCount(
+			2,
+		);
+		await expect(preview.locator('.mermaid-preview svg')).toBeVisible();
+		await expect(preview.locator('.mermaid-preview')).toContainText('Alice');
+	});
+
 	test('shared links open in preview on desktop and can open the full workspace', async ({
 		page,
 	}) => {
