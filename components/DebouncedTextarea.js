@@ -4,6 +4,10 @@ import { htm } from '../libraries.bundle.js';
 
 const html = htm.bind(h);
 
+// The syntax font renders slowly in browsers for large textareas and makes
+// the editror unresponsive. Opt out of syntax highlighting for large files.
+const MAX_SYNTAX_HIGHLIGHTED_CHARACTERS = 10_000;
+
 /** @typedef {import('../lib/types.js').FileEntry} FileEntry */
 
 /**
@@ -38,6 +42,8 @@ export default function DebouncedTextarea({
 	const commitRef = useRef(/** @type {() => void} */ (() => {}));
 
 	const text = new TextDecoder().decode(file.content);
+	const usesSyntaxFont =
+		syntaxHighlighted && text.length <= MAX_SYNTAX_HIGHLIGHTED_CHARACTERS;
 
 	function commit() {
 		if (timerRef.current === null) return; // nothing buffered
@@ -48,7 +54,13 @@ export default function DebouncedTextarea({
 	}
 	commitRef.current = commit;
 
-	function handleInput() {
+	function handleInput(event) {
+		const textarea = /** @type {HTMLTextAreaElement} */ (event.currentTarget);
+		textarea.classList.toggle(
+			'syntax-highlighted',
+			syntaxHighlighted &&
+				textarea.value.length <= MAX_SYNTAX_HIGHLIGHTED_CHARACTERS,
+		);
 		if (timerRef.current !== null) clearTimeout(timerRef.current);
 		timerRef.current = setTimeout(commit, delay);
 	}
@@ -66,7 +78,7 @@ export default function DebouncedTextarea({
 
 	return html`<textarea
 		ref=${ref}
-		class="editor-textarea${syntaxHighlighted ? ' syntax-highlighted' : ''}"
+		class="editor-textarea${usesSyntaxFont ? ' syntax-highlighted' : ''}"
 		defaultValue=${text}
 		onInput=${handleInput}
 		onBlur=${commit}

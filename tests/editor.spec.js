@@ -64,6 +64,29 @@ test.describe('editor page', () => {
 		);
 	});
 
+	test('uses the basic monospace font for code over 10,000 characters', async ({
+		page,
+	}) => {
+		await page.goto('/');
+		await page.getByRole('button', { name: 'Toggle sidebar' }).click();
+		await page.locator('#starter-select').selectOption('webpage');
+		await page.locator('.file-item', { hasText: 'script.js' }).click();
+
+		const editor = page.locator('textarea.editor-textarea');
+		await editor.fill('a'.repeat(10_000));
+		await expect(editor).toHaveClass(/syntax-highlighted/);
+
+		await editor.fill('a'.repeat(10_001));
+		await expect(editor).not.toHaveClass(/syntax-highlighted/);
+		await expect(editor).not.toHaveCSS(
+			'font-family',
+			/Syntax Highlighter (Light|Night) Owl/,
+		);
+
+		await editor.fill('const restored = true;');
+		await expect(editor).toHaveClass(/syntax-highlighted/);
+	});
+
 	test('can create a new file', async ({ page }) => {
 		await page.goto('/');
 		await page.getByRole('button', { name: 'Toggle sidebar' }).click();

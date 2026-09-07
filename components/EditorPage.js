@@ -79,7 +79,6 @@ export default function EditorPage() {
 	const defaultReadmeUntouched = useRef(
 		!initial.cameFromSharedLink && isDefaultReadmeOnly(initial.files),
 	);
-	console.log('EditorPage render');
 
 	// Decode files from URL hash on first load
 	useEffect(() => {
