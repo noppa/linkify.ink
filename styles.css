@@ -399,13 +399,17 @@ html, body {
 	color: var(--text);
 	border: none;
 	outline: none;
-	font-family: var(--editor-font), ui-monospace, monospace;
-	font-variant-ligatures: contextual;
+	font-family: inherit;
 	font-size: 13px;
 	line-height: 1.5;
 	padding: 10px;
 	resize: none;
 	tab-size: 2;
+}
+
+.editor-textarea.syntax-highlighted {
+	font-family: var(--editor-font), ui-monospace, monospace;
+	font-variant-ligatures: contextual;
 }
 
 .editor-empty {

@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from '../libraries.bundle.js';
 import { htm } from '../libraries.bundle.js';
 import Icon from '../lib/icons.js';
 import DebouncedTextarea from './DebouncedTextarea.js';
-import { guessType, isTextFile, isImageFile } from '../lib/filetypes.js';
+import { guessType, isTextFile, isImageFile, isCodeFile } from '../lib/filetypes.js';
 
 const html = htm.bind(h);
 
@@ -48,6 +48,7 @@ export default function Editor({ file, onChange, onReplace }) {
 							key=${file.name}
 							file=${file}
 							onChange=${onChange}
+							syntaxHighlighted=${isCodeFile(file)}
 						/>`
 					: html`<div class="editor-binary-notice">
 							Binary file — not editable as text

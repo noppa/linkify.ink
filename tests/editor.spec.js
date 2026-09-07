@@ -13,11 +13,21 @@ test.describe('editor page', () => {
 		await expect(fileItem).toHaveClass(/active/);
 	});
 
-	test('uses the syntax-highlighting font in the native textarea', async ({ page }) => {
+	test('uses the syntax-highlighting font only for code files', async ({ page }) => {
 		await page.goto('/');
 
 		const editor = page.locator('textarea.editor-textarea');
 		await expect(editor).toBeVisible();
+		await expect(editor).not.toHaveClass(/syntax-highlighted/);
+		await expect(editor).not.toHaveCSS(
+			'font-family',
+			/Syntax Highlighter Light Owl/,
+		);
+
+		await page.getByRole('button', { name: 'Toggle sidebar' }).click();
+		await page.locator('#starter-select').selectOption('webpage');
+		await page.locator('.file-item', { hasText: 'script.js' }).click();
+		await expect(editor).toHaveClass(/syntax-highlighted/);
 		await expect
 			.poll(() =>
 				page.evaluate(() =>
@@ -39,6 +49,16 @@ test.describe('editor page', () => {
 			)
 			.toBe(true);
 		await expect(editor).toHaveCSS(
+			'font-family',
+			/Syntax Highlighter Night Owl/,
+		);
+
+		await page.getByRole('button', { name: 'new' }).click();
+		await page.locator('.file-item-rename-input').fill('notes.txt');
+		await page.locator('.file-item-rename-input').press('Enter');
+		await page.locator('.file-item', { hasText: 'notes.txt' }).click();
+		await expect(editor).not.toHaveClass(/syntax-highlighted/);
+		await expect(editor).not.toHaveCSS(
 			'font-family',
 			/Syntax Highlighter Night Owl/,
 		);

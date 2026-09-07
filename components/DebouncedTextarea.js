@@ -19,10 +19,16 @@ const html = htm.bind(h);
  * @param {{
  *   file: FileEntry,
  *   onChange: (content: Uint8Array) => void,
+ *   syntaxHighlighted?: boolean,
  *   delay?: number,
  * }} props
  */
-export default function DebouncedTextarea({ file, onChange, delay = 600 }) {
+export default function DebouncedTextarea({
+	file,
+	onChange,
+	syntaxHighlighted = false,
+	delay = 600,
+}) {
 	const ref = useRef(/** @type {HTMLTextAreaElement | null} */ (null));
 	const timerRef = useRef(
 		/** @type {ReturnType<typeof setTimeout> | null} */ (null),
@@ -60,7 +66,7 @@ export default function DebouncedTextarea({ file, onChange, delay = 600 }) {
 
 	return html`<textarea
 		ref=${ref}
-		class="editor-textarea"
+		class="editor-textarea${syntaxHighlighted ? ' syntax-highlighted' : ''}"
 		defaultValue=${text}
 		onInput=${handleInput}
 		onBlur=${commit}
