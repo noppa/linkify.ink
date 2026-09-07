@@ -20,6 +20,7 @@ const entries = [
 	'libraries-for-preview.bundle.js',
 	'vendor.codec.bundle.js',
 	'linkify.ink.js',
+	'assets',
 	'components',
 	'lib',
 ];

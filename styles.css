@@ -4,6 +4,18 @@
 	padding: 0;
 }
 
+@font-face {
+	font-family: 'Syntax Highlighter Light Owl';
+	src: url('./assets/fonts/FontWithASyntaxHighlighterLightOwl-Regular.woff2') format('woff2');
+	font-display: swap;
+}
+
+@font-face {
+	font-family: 'Syntax Highlighter Night Owl';
+	src: url('./assets/fonts/FontWithASyntaxHighlighterNightOwl-Regular.woff2') format('woff2');
+	font-display: swap;
+}
+
 .icon {
 	display: inline-block;
 	vertical-align: -3px;
@@ -22,8 +34,15 @@
 	--warn: light-dark(#b45309, #fbbf24);
 	--accent-hover: light-dark(#2563eb, #3b82f6);
 	--dot: #3b82f6;
+	--editor-font: 'Syntax Highlighter Light Owl';
 	font-family: ui-monospace, 'Cascadia Code', 'Fira Code', monospace;
 	font-size: 13px;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--editor-font: 'Syntax Highlighter Night Owl';
+	}
 }
 
 html, body {
@@ -380,7 +399,8 @@ html, body {
 	color: var(--text);
 	border: none;
 	outline: none;
-	font-family: inherit;
+	font-family: var(--editor-font), ui-monospace, monospace;
+	font-variant-ligatures: contextual;
 	font-size: 13px;
 	line-height: 1.5;
 	padding: 10px;

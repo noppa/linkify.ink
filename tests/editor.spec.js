@@ -13,6 +13,37 @@ test.describe('editor page', () => {
 		await expect(fileItem).toHaveClass(/active/);
 	});
 
+	test('uses the syntax-highlighting font in the native textarea', async ({ page }) => {
+		await page.goto('/');
+
+		const editor = page.locator('textarea.editor-textarea');
+		await expect(editor).toBeVisible();
+		await expect
+			.poll(() =>
+				page.evaluate(() =>
+					document.fonts.check('13px "Syntax Highlighter Light Owl"'),
+				),
+			)
+			.toBe(true);
+		await expect(editor).toHaveCSS(
+			'font-family',
+			/Syntax Highlighter Light Owl/,
+		);
+
+		await page.emulateMedia({ colorScheme: 'dark' });
+		await expect
+			.poll(() =>
+				page.evaluate(() =>
+					document.fonts.check('13px "Syntax Highlighter Night Owl"'),
+				),
+			)
+			.toBe(true);
+		await expect(editor).toHaveCSS(
+			'font-family',
+			/Syntax Highlighter Night Owl/,
+		);
+	});
+
 	test('can create a new file', async ({ page }) => {
 		await page.goto('/');
 		await page.getByRole('button', { name: 'Toggle sidebar' }).click();
