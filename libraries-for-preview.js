@@ -2,6 +2,7 @@
 // encoding/decoding a URL or rendering the editor UI). Bundled separately and
 // lazy-loaded so they stay out of the main libraries.bundle.js.
 import { marked, Renderer } from 'marked';
+import hljs from 'highlight.js/lib/common';
 import mermaid from 'mermaid';
 
 mermaid.initialize({
@@ -36,10 +37,9 @@ export async function renderMarkdown(source) {
 	const diagrams = [];
 	const nonce = crypto.randomUUID();
 	const renderer = new Renderer();
-	const renderCode = renderer.code.bind(renderer);
 	renderer.code = (token) => {
 		const language = token.lang?.trim().split(/\s+/, 1)[0]?.toLowerCase();
-		if (language !== 'mermaid') return renderCode(token);
+		if (language !== 'mermaid') return renderHighlightedCode(token.text, language);
 
 		const placeholder = `<div data-linkify-mermaid="${nonce}-${diagrams.length}"></div>`;
 		diagrams.push({ placeholder, source: token.text });
@@ -57,6 +57,23 @@ export async function renderMarkdown(source) {
 		output = output.replace(diagram.placeholder, rendered);
 	}
 	return output;
+}
+
+/**
+ * Render source as escaped, highlighted HTML. Highlight.js uses the requested
+ * language when it recognises it and auto-detects among its common languages
+ * for unlabelled or unfamiliar code.
+ * @param {string} source
+ * @param {string | undefined} language
+ * @returns {string}
+ */
+export function renderHighlightedCode(source, language) {
+	const requested = language?.trim().toLowerCase();
+	const result = requested && hljs.getLanguage(requested)
+		? hljs.highlight(source, { language: requested, ignoreIllegals: true })
+		: hljs.highlightAuto(source);
+	const languageClass = result.language ? ` language-${result.language}` : '';
+	return `<pre><code class="hljs${languageClass}">${result.value}</code></pre>`;
 }
 
 /** @param {unknown} error */

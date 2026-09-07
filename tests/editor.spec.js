@@ -113,7 +113,7 @@ test.describe('editor page', () => {
 	}) => {
 		await page.goto('/');
 		await page.locator('.editor-textarea').fill(
-			'# Diagram\n\n```mermaid\nflowchart LR\n  Start --> Finish\n```',
+			'# Diagram\n\n```js\nconst answer = 42;\n```\n\n```mermaid\nflowchart LR\n  Start --> Finish\n```',
 		);
 		await page.locator('.editor-textarea').blur();
 
@@ -123,6 +123,12 @@ test.describe('editor page', () => {
 			.locator('iframe')
 			.contentFrame();
 		await expect(preview.getByRole('heading', { name: 'Diagram' })).toBeVisible();
+		await expect(preview.locator('code.hljs.language-js')).toContainText(
+			'const answer = 42;',
+		);
+		const markdownKeyword = preview.locator('code .hljs-keyword');
+		await expect(markdownKeyword).toHaveText('const');
+		await expect(markdownKeyword).toHaveCSS('color', 'rgb(207, 34, 46)');
 		await expect(preview.locator('.mermaid-diagram svg')).toBeVisible();
 		await expect(preview.locator('.mermaid-diagram')).toContainText('Start');
 		await expect(preview.locator('code.language-mermaid')).toHaveCount(0);
@@ -145,6 +151,28 @@ test.describe('editor page', () => {
 		);
 		await expect(preview.locator('.mermaid-preview svg')).toBeVisible();
 		await expect(preview.locator('.mermaid-preview')).toContainText('Alice');
+	});
+
+	test('syntax-highlights standalone code files', async ({ page }) => {
+		await page.goto('/');
+		await page.getByRole('button', { name: 'Toggle sidebar' }).click();
+		await page.locator('input[type="file"]').setInputFiles({
+			name: 'hello.py',
+			mimeType: 'application/octet-stream',
+			buffer: Buffer.from('def greet(name):\n    return f"Hello, {name}!"'),
+		});
+		await page.locator('.file-item', { hasText: 'hello.py' }).click();
+		await expect(page.locator('.editor-textarea')).toHaveValue(/def greet\(name\):/);
+
+		const preview = page
+			.locator('.preview-iframe')
+			.contentFrame()
+			.locator('iframe')
+			.contentFrame();
+		await expect(preview.locator('.code-preview code.hljs.language-py')).toContainText(
+			'def greet(name):',
+		);
+		await expect(preview.locator('code .hljs-keyword').first()).toHaveText('def');
 	});
 
 	test('shared links open in preview on desktop and can open the full workspace', async ({

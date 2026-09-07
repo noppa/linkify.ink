@@ -2,13 +2,14 @@ import { h } from '../libraries.bundle.js';
 import { useEffect, useRef, useState } from '../libraries.bundle.js';
 import { htm } from '../libraries.bundle.js';
 import Icon from '../lib/icons.js';
+import { isCodeFile } from '../lib/filetypes.js';
 
 const html = htm.bind(h);
 
 /**
- * Lazily load the preview-only library bundle (markdown renderer, and any future
- * preview features). Kept out of the main bundle so the editor's critical path
- * stays small; the import is cached so it only fetches once.
+ * Lazily load the preview-only library bundle (Markdown, syntax highlighting,
+ * and diagrams). Kept out of the main bundle so the editor's critical path stays
+ * small; the import is cached so it only fetches once.
  * @type {Promise<typeof import('../libraries-for-preview.bundle.js')> | null}
  */
 let previewLibsPromise = null;
@@ -63,6 +64,20 @@ const isHosted = location.hostname === HOSTED_ORIGIN;
 // into the sandbox. The leading dunder + suffix makes a real-file collision
 // vanishingly unlikely; it must end in .html so the SW serves it as text/html.
 const PREVIEW_ENTRY = '__linkify_preview__.html';
+
+const HIGHLIGHT_LANGUAGE_BY_EXTENSION = {
+	htm: 'xml',
+	html: 'xml',
+	cjs: 'javascript',
+	js: 'javascript',
+	jsx: 'javascript',
+	mjs: 'javascript',
+	sh: 'bash',
+	ts: 'typescript',
+	tsx: 'typescript',
+	wat: 'wasm',
+	yml: 'yaml',
+};
 
 /**
  * @param {{
@@ -265,7 +280,14 @@ function renderPreview(iframe, file, nojs, filesRef, sandboxRef, isCancelled) {
 			})
 			.catch((error) => {
 				if (isCancelled()) return;
-				showPreviewError(iframe, error, nojs, filesRef, sandboxRef);
+				showPreviewError(
+					iframe,
+					error,
+					nojs,
+					filesRef,
+					sandboxRef,
+					'Could not render Markdown preview',
+				);
 			});
 		return;
 	}
@@ -308,8 +330,38 @@ function renderPreview(iframe, file, nojs, filesRef, sandboxRef, isCancelled) {
 		return;
 	}
 
-	// Everything else: show the raw text in a <pre>.
-	const text = escapeHtml(new TextDecoder().decode(file.content));
+	const source = new TextDecoder().decode(file.content);
+	if (isCodeFile(file)) {
+		const language = (HIGHLIGHT_LANGUAGE_BY_EXTENSION[ext] ?? ext) || undefined;
+		loadPreviewLibs()
+			.then(({ renderHighlightedCode }) => renderHighlightedCode(source, language))
+			.then((rendered) => {
+				if (isCancelled()) return;
+				showInSandbox(
+					iframe,
+					PREVIEW_ENTRY,
+					syntheticFile(previewDocument(rendered, 'code-preview')),
+					nojs,
+					filesRef,
+					sandboxRef,
+				);
+			})
+			.catch((error) => {
+				if (isCancelled()) return;
+				showPreviewError(
+					iframe,
+					error,
+					nojs,
+					filesRef,
+					sandboxRef,
+					'Could not highlight code',
+				);
+			});
+		return;
+	}
+
+	// Unknown binary formats retain the existing best-effort raw preview.
+	const text = escapeHtml(source);
 	const doc = `<!doctype html><html><head><meta charset="utf-8"></head><body><pre style="margin:0;padding:10px;font-family:monospace;white-space:pre-wrap">${text}</pre></body></html>`;
 	showInSandbox(
 		iframe,
@@ -330,6 +382,25 @@ const PREVIEW_STYLES = `
 html { color-scheme: light; }
 body { box-sizing: border-box; margin: 0; padding: 16px; font-family: sans-serif; color: #24292f; }
 .markdown-preview { max-width: 720px; }
+.markdown-preview :not(pre) > code { padding: 0.15em 0.35em; border-radius: 4px; background: #eff1f3; font: 0.875em ui-monospace, monospace; }
+.code-preview { padding: 0; }
+pre { margin: 16px 0; }
+pre code.hljs { display: block; box-sizing: border-box; overflow-x: auto; padding: 12px; border: 1px solid #d0d7de; border-radius: 6px; background: #f6f8fa; color: #24292f; font: 13px/1.5 ui-monospace, monospace; tab-size: 2; }
+.code-preview pre { min-height: 100vh; margin: 0; }
+.code-preview pre code.hljs { min-height: 100vh; border: 0; border-radius: 0; }
+.hljs-comment, .hljs-quote { color: #6e7781; font-style: italic; }
+.hljs-doctag, .hljs-keyword, .hljs-meta .hljs-keyword, .hljs-template-tag, .hljs-type { color: #cf222e; }
+.hljs-title, .hljs-title.class_, .hljs-title.function_ { color: #8250df; }
+.hljs-attr, .hljs-attribute, .hljs-literal, .hljs-meta, .hljs-number, .hljs-operator, .hljs-selector-attr, .hljs-selector-class, .hljs-selector-id, .hljs-variable { color: #0550ae; }
+.hljs-meta .hljs-string, .hljs-regexp, .hljs-string { color: #0a3069; }
+.hljs-built_in, .hljs-symbol { color: #953800; }
+.hljs-code, .hljs-formula, .hljs-name, .hljs-params, .hljs-property, .hljs-selector-pseudo, .hljs-selector-tag, .hljs-subst { color: #116329; }
+.hljs-section { color: #0550ae; font-weight: 700; }
+.hljs-bullet { color: #953800; }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 700; }
+.hljs-addition { color: #116329; background: #dafbe1; }
+.hljs-deletion { color: #82071e; background: #ffebe9; }
 .mermaid-preview { min-height: calc(100vh - 32px); display: grid; place-items: center; }
 .mermaid-diagram { margin: 16px 0; overflow: auto; text-align: center; }
 .mermaid-diagram:first-child { margin-top: 0; }
@@ -350,10 +421,18 @@ function previewDocument(body, className) {
  * @param {boolean} nojs
  * @param {{ current: FileEntry[] }} filesRef
  * @param {{ current: Sandbox | null }} sandboxRef
+ * @param {string} [title]
  */
-function showPreviewError(iframe, error, nojs, filesRef, sandboxRef) {
+function showPreviewError(
+	iframe,
+	error,
+	nojs,
+	filesRef,
+	sandboxRef,
+	title = 'Could not render Mermaid diagram',
+) {
 	const message = escapeHtml(error instanceof Error ? error.message : String(error));
-	const body = `<div class="mermaid-error" role="alert"><strong>Could not render Mermaid diagram</strong><pre>${message}</pre></div>`;
+	const body = `<div class="mermaid-error" role="alert"><strong>${title}</strong><pre>${message}</pre></div>`;
 	showInSandbox(
 		iframe,
 		PREVIEW_ENTRY,
