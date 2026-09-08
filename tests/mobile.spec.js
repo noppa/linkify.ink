@@ -78,6 +78,35 @@ test.describe('preview without a service worker', () => {
 		await expect(page.locator('.preview-notice')).toContainText('Limited preview');
 	});
 
+	test('renders a scripts-off HTML preview without sandboxing scripts out', async ({
+		page,
+	}) => {
+		const consoleMessages = [];
+		page.on('console', (message) => consoleMessages.push(message.text()));
+		await page.goto('/');
+		await page.getByRole('button', { name: 'Toggle sidebar' }).click();
+		await page.locator('#starter-select').selectOption('webpage');
+		await page.locator('textarea.editor-textarea').fill(
+			'<h1>Hello without JS</h1><script>document.body.dataset.ran = "yes"</script>',
+		);
+		const loader = page.frameLocator('.preview-iframe');
+		const preview = loader.frameLocator('#content');
+		await expect(preview.locator('h1')).toHaveText('Hello without JS');
+		await page
+			.locator('.mobile-tab')
+			.filter({ hasText: 'Preview' })
+			.evaluate((button) => /** @type {HTMLButtonElement} */ (button).click());
+		await page.getByRole('button', { name: /js on/i }).click();
+
+		const contentFrame = loader.locator('#content');
+		await expect(contentFrame).toHaveAttribute('sandbox', /allow-scripts/);
+		await expect(preview.locator('h1')).toHaveText('Hello without JS');
+		await expect(preview.locator('body')).not.toHaveAttribute('data-ran', 'yes');
+		expect(consoleMessages).not.toContainEqual(
+			expect.stringContaining("'allow-scripts' permission is not set"),
+		);
+	});
+
 	test('leaves no notice on a preview that needs no other files', async ({ page }) => {
 		await page.goto('/');
 		await page.locator('textarea.editor-textarea').fill('# Hello');

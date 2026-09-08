@@ -20,7 +20,6 @@
 			// runs its own (registering the SW below is the entire preview
 			// mechanism), so the switch lives on the nested content frame instead.
 			let pendingNoJs = false;
-			let appliedNoJs = null;
 			let registration = null;
 			// Bumped on each (re)render so the nested iframe URL always changes and
 			// actually reloads — assigning an unchanged src would be a no-op, so edits
@@ -104,22 +103,29 @@
 			// on every external link), and -to-escape-sandbox means the tab they open is
 			// an ordinary tab rather than another sandboxed one.
 			const CONTENT_SANDBOX = 'allow-same-origin allow-popups allow-popups-to-escape-sandbox';
+			const CONTENT_SANDBOX_WITH_SCRIPTS = CONTENT_SANDBOX + ' allow-scripts';
 
-			function showEntry(src) {
+			function showEntry(src, scriptsBlockedByCsp = false) {
 				let frame = document.getElementById('content');
+				// Safari's blob fallback needs allow-scripts on the frame even when the
+				// preview is in JS-off mode. In that path the generated document carries
+				// a script-src 'none' CSP instead, so author scripts remain disabled.
+				const sandboxFlags =
+					pendingNoJs && !scriptsBlockedByCsp
+						? CONTENT_SANDBOX
+						: CONTENT_SANDBOX_WITH_SCRIPTS;
 				// Sandbox flags are read at navigation time, and this frame is reused
 				// across edits — so a frame created under the old flags is thrown away
 				// rather than mutated, which keeps the applied flags and the attribute
 				// impossible to disagree.
-				if (frame && appliedNoJs !== pendingNoJs) {
+				if (frame && frame.getAttribute('sandbox') !== sandboxFlags) {
 					frame.remove();
 					frame = null;
 				}
 				if (!frame) {
 					frame = document.createElement('iframe');
 					frame.id = 'content';
-					if (pendingNoJs) frame.setAttribute('sandbox', CONTENT_SANDBOX);
-					appliedNoJs = pendingNoJs;
+					frame.setAttribute('sandbox', sandboxFlags);
 					document.body.appendChild(frame);
 				}
 				frame.src = src || '/' + pendingEntry + '?__preview=' + ++renderCount;
@@ -163,7 +169,10 @@
 				}
 
 				const source = new TextDecoder().decode(entryBytes);
-				showEntry(mintBlobUrl(rewriteReferences(source, urlByName), 'text/html'));
+				showEntry(
+					mintBlobUrl(rewriteReferences(source, urlByName), 'text/html'),
+					pendingNoJs,
+				);
 			}
 
 			function mintBlobUrl(data, type) {
@@ -175,6 +184,12 @@
 			/** Point the document's own file references at their blob URLs. */
 			function rewriteReferences(source, urlByName) {
 				const doc = new DOMParser().parseFromString(source, 'text/html');
+				if (pendingNoJs) {
+					const policy = doc.createElement('meta');
+					policy.httpEquiv = 'Content-Security-Policy';
+					policy.content = "script-src 'none'; object-src 'none'; frame-src 'none'";
+					(doc.head || doc.documentElement).prepend(policy);
+				}
 				for (const element of doc.querySelectorAll('[src], [href], [poster]')) {
 					for (const attribute of ['src', 'href', 'poster']) {
 						const value = element.getAttribute(attribute);
