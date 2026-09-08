@@ -39,7 +39,7 @@ Everything runs client-side using web platform primitives:
 - **No server-side state.** The hash fragment never leaves the browser, so the "service" has nothing to store, leak, or take down. A shared link works as long as the static site is up — and the decoding logic is simple enough to reimplement if it isn't.
 - **Honest end-to-end encryption.** Encryption keys are derived and used entirely in the browser. In ECDH mode, the private key is generated fresh on the receive page and never serialized anywhere.
 - **Minimal moving parts.** The app is plain JavaScript with Preact + htm — no JSX, no build step for the app code itself. Only the vendored npm dependencies are bundled (with esbuild) into a single committed `libraries.bundle.js`. Types are checked from JSDoc annotations with `tsgo --noEmit`.
-- **Sandboxed previews.** Untrusted HTML/JS from a link never runs on the main origin. Previews execute on a `*.sandbox.linkify.ink` wildcard subdomain backed by a tiny Cloudflare Worker, with files served by a per-tab service worker.
+- **Sandboxed previews.** Untrusted HTML/JS from a link never runs on the main origin. Previews execute on a `*.sandbox.linkify.ink` wildcard subdomain backed by a tiny Cloudflare Worker, with files served by a per-tab service worker. Safari refuses service workers in a cross-origin frame, which the sandbox is, so there the loader renders the files from `blob:` URLs it mints itself instead — same sandbox origin, same isolation, minus the ability to resolve references made from inside a stylesheet or a module.
 
 ## Browser extension
 
