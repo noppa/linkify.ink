@@ -49,6 +49,12 @@ html, body {
 	height: 100%;
 	background: var(--bg);
 	color: var(--text);
+	/* iOS Safari inflates small text on narrow viewports ("text autosizing"),
+	   which pushes this app's 11–14px chrome up to ~17px and overflows the topbar
+	   and the tab bar off the side of the screen. Sizes here are already chosen
+	   for the viewport, so opt out; pinch-zoom is unaffected. */
+	-webkit-text-size-adjust: 100%;
+	text-size-adjust: 100%;
 }
 
 #app {
@@ -60,6 +66,11 @@ html, body {
 /* ── App shell ── */
 .app {
 	display: grid;
+	/* minmax(0, …) rather than the default auto track: an auto track refuses to
+	   shrink below its content's min-content width, so a row that doesn't fit —
+	   the topbar with inflated text, say — would widen the whole shell and get
+	   clipped by the overflow below instead of shrinking to fit. */
+	grid-template-columns: minmax(0, 1fr);
 	grid-template-rows: 40px auto 1fr;
 	height: 100dvh;
 	overflow: hidden;
@@ -104,6 +115,17 @@ html, body {
 	color: var(--text);
 	font-weight: 600;
 	font-size: 14px;
+	min-width: 0;
+}
+
+/* The topbar's buttons are the part that has to stay reachable, so when the bar
+   runs out of room — a narrow screen, or a browser that inflates the text — the
+   wordmark is what gives way. */
+.logo-name {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .logo-dot {
@@ -117,6 +139,7 @@ html, body {
 	display: flex;
 	align-items: center;
 	gap: 6px;
+	flex-shrink: 0;
 }
 
 /* ── Buttons ── */
@@ -503,6 +526,7 @@ html, body {
 
 .mobile-tab {
 	flex: 1;
+	min-width: 0;
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -753,7 +777,12 @@ html, body {
 		display: none;
 	}
 
-	.main {
+	/* .main.sidebar-collapsed also sets grid-template-columns, and a media query
+	   adds no specificity — so the collapsed rule has to be named here too, or a
+	   collapsed sidebar keeps its two desktop columns while these rows apply and
+	   the whole app is squeezed into the first (auto-height) row. */
+	.main,
+	.main.sidebar-collapsed {
 		grid-template-columns: 1fr;
 		grid-template-rows: auto 1fr;
 	}
@@ -792,5 +821,16 @@ html, body {
 
 	.right.mobile-tab-preview .editor-panel {
 		display: none;
+	}
+
+	/* iOS Safari zooms the page in when a field it focuses has text under 16px,
+	   and never zooms back out — leaving the app's chrome cropped off-screen. */
+	.editor-textarea,
+	.file-item-rename-input,
+	.modal select,
+	.modal textarea,
+	.modal input[type='text'],
+	.modal input[type='password'] {
+		font-size: 16px;
 	}
 }

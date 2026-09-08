@@ -26,33 +26,66 @@
 			// actually reloads — assigning an unchanged src would be a no-op, so edits
 			// wouldn't show. The SW matches on pathname and ignores this query.
 			let renderCount = 0;
+			// Whether the service worker actually ended up serving this sandbox. It
+			// doesn't everywhere: this loader is a cross-origin ("third-party") frame,
+			// and Safari — iOS Safari in particular — refuses service workers in one,
+			// so the whole preview would otherwise be a permanently blank frame. When
+			// it isn't available the files are rendered from blob: URLs instead.
+			let serviceWorkerReady = false;
+			// A registration that never takes control is the same dead end as one that
+			// throws, so give it a deadline rather than waiting forever.
+			const SW_CONTROL_TIMEOUT_MS = 4000;
 
 			async function init() {
-				if (!('serviceWorker' in navigator)) return;
+				try {
+					if (!('serviceWorker' in navigator)) {
+						throw new Error('service workers are unavailable here');
+					}
 
-				registration = await navigator.serviceWorker.register('/sandbox-sw.js', { scope: '/' });
+					registration = await navigator.serviceWorker.register('/sandbox-sw.js', { scope: '/' });
 
-				// Tear down the service worker when this sandbox goes away (the parent
-				// rebuilds or removes the iframe, or the editor navigates away). Without
-				// this, every preview build leaves a throwaway service worker registered —
-				// in prod each build gets its own UUID subdomain, so they'd pile up forever.
-				// This only fires on real teardown because the loader keeps itself alive and
-				// renders the entry in a nested iframe (below) instead of navigating away.
-				window.addEventListener('pagehide', () => { registration?.unregister(); });
+					// Tear down the service worker when this sandbox goes away (the parent
+					// rebuilds or removes the iframe, or the editor navigates away). Without
+					// this, every preview build leaves a throwaway service worker registered —
+					// in prod each build gets its own UUID subdomain, so they'd pile up forever.
+					// This only fires on real teardown because the loader keeps itself alive and
+					// renders the entry in a nested iframe (below) instead of navigating away.
+					window.addEventListener('pagehide', () => { registration?.unregister(); });
 
-				// Wait until this page is controlled by the SW (may need skipWaiting + claim)
-				await new Promise((resolve) => {
-					if (navigator.serviceWorker.controller) { resolve(undefined); return; }
-					navigator.serviceWorker.addEventListener('controllerchange', () => resolve(undefined), { once: true });
+					// Wait until this page is controlled by the SW (may need skipWaiting + claim)
+					await waitForController();
+
+					// SW sends 'ready' after storing files → show entry
+					navigator.serviceWorker.addEventListener('message', (event) => {
+						if (event.data?.type === 'ready') showEntry();
+					});
+
+					serviceWorkerReady = true;
+				} catch (error) {
+					console.warn('sandbox: previewing without a service worker —', error);
+				}
+
+				// Tell parent we're ready to receive the file payload, and which of the
+				// two rendering paths it is about to get.
+				window.parent.postMessage(
+					{ type: 'sandbox-ready', serviceWorker: serviceWorkerReady },
+					PARENT_ORIGIN,
+				);
+			}
+
+			function waitForController() {
+				if (navigator.serviceWorker.controller) return Promise.resolve();
+				return new Promise((resolve, reject) => {
+					const timer = setTimeout(
+						() => reject(new Error('the service worker never took control')),
+						SW_CONTROL_TIMEOUT_MS,
+					);
+					navigator.serviceWorker.addEventListener(
+						'controllerchange',
+						() => { clearTimeout(timer); resolve(undefined); },
+						{ once: true },
+					);
 				});
-
-				// SW sends 'ready' after storing files → show entry
-				navigator.serviceWorker.addEventListener('message', (event) => {
-					if (event.data?.type === 'ready') showEntry();
-				});
-
-				// Tell parent we're ready to receive the file payload
-				window.parent.postMessage({ type: 'sandbox-ready' }, PARENT_ORIGIN);
 			}
 
 			// Render the entry file in a nested iframe so this loader document stays alive
@@ -72,7 +105,7 @@
 			// an ordinary tab rather than another sandboxed one.
 			const CONTENT_SANDBOX = 'allow-same-origin allow-popups allow-popups-to-escape-sandbox';
 
-			function showEntry() {
+			function showEntry(src) {
 				let frame = document.getElementById('content');
 				// Sandbox flags are read at navigation time, and this frame is reused
 				// across edits — so a frame created under the old flags is thrown away
@@ -89,7 +122,94 @@
 					appliedNoJs = pendingNoJs;
 					document.body.appendChild(frame);
 				}
-				frame.src = '/' + pendingEntry + '?__preview=' + ++renderCount;
+				frame.src = src || '/' + pendingEntry + '?__preview=' + ++renderCount;
+			}
+
+			// ── Fallback rendering, for browsers that won't run the service worker ──
+
+			// Blob URLs backing the fallback renders. The previous render's URLs are
+			// kept alive for one more round: an iframe navigation is queued rather
+			// than immediate, so revoking a URL in the same tick it was handed to
+			// the frame can cancel the load it was minted for.
+			let blobUrls = [];
+			let previousBlobUrls = [];
+
+			/**
+			 * Render the entry document straight from blob: URLs. A blob URL created
+			 * here belongs to this sandbox origin, so the preview stays exactly as
+			 * isolated from the editor as the service-worker path — what it loses is
+			 * depth: only references written in the entry document's own markup are
+			 * rewritten, so a stylesheet's url(), an @import, or an ES module's
+			 * relative import still resolves against the blob URL and finds nothing.
+			 * @param {Record<string, Uint8Array>} filesData
+			 */
+			function renderWithBlobUrls(filesData) {
+				for (const url of previousBlobUrls) URL.revokeObjectURL(url);
+				previousBlobUrls = blobUrls;
+				blobUrls = [];
+
+				const bytesByName = new Map();
+				for (const [name, bytes] of Object.entries(filesData)) {
+					bytesByName.set(normalizeName(name), bytes);
+				}
+				const entryName = normalizeName(pendingEntry);
+				const entryBytes = bytesByName.get(entryName);
+				if (!entryBytes) return;
+
+				const urlByName = new Map();
+				for (const [name, bytes] of bytesByName) {
+					if (name === entryName) continue;
+					urlByName.set(name, mintBlobUrl(bytes, mimeFor(name)));
+				}
+
+				const source = new TextDecoder().decode(entryBytes);
+				showEntry(mintBlobUrl(rewriteReferences(source, urlByName), 'text/html'));
+			}
+
+			function mintBlobUrl(data, type) {
+				const url = URL.createObjectURL(new Blob([data], { type }));
+				blobUrls.push(url);
+				return url;
+			}
+
+			/** Point the document's own file references at their blob URLs. */
+			function rewriteReferences(source, urlByName) {
+				const doc = new DOMParser().parseFromString(source, 'text/html');
+				for (const element of doc.querySelectorAll('[src], [href], [poster]')) {
+					for (const attribute of ['src', 'href', 'poster']) {
+						const value = element.getAttribute(attribute);
+						const name = value && fileNameFromReference(value);
+						const url = name && urlByName.get(name);
+						if (url) element.setAttribute(attribute, url);
+					}
+				}
+				return '<!doctype html>' + doc.documentElement.outerHTML;
+			}
+
+			/** The project file a markup reference points at, or null if it points elsewhere. */
+			function fileNameFromReference(reference) {
+				const isAbsolute = /^[a-z][a-z0-9+.-]*:/i.test(reference)
+					|| reference.startsWith('//')
+					|| reference.startsWith('#');
+				if (isAbsolute) return null;
+				return normalizeName(reference.split(/[?#]/)[0]);
+			}
+
+			function normalizeName(name) {
+				return String(name).replace(/^\.?\//, '');
+			}
+
+			/** Mirrors the content types the service worker serves in sandbox-sw.js.txt. */
+			function mimeFor(path) {
+				const map = {
+					html: 'text/html', htm: 'text/html', css: 'text/css',
+					js: 'text/javascript', mjs: 'text/javascript', json: 'application/json',
+					md: 'text/markdown', txt: 'text/plain', svg: 'image/svg+xml',
+					png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+					gif: 'image/gif', webp: 'image/webp', avif: 'image/avif',
+					woff: 'font/woff', woff2: 'font/woff2', ico: 'image/x-icon',
+				};
+				return map[path.split('.').pop()?.toLowerCase() ?? ''] ?? 'application/octet-stream';
 			}
 
 			// Receive files from the parent (linkify.ink editor)
@@ -98,6 +218,10 @@
 				if (!event.data || event.data.type !== 'files') return;
 				pendingEntry = event.data.entry || 'index.html';
 				pendingNoJs = Boolean(event.data.nojs);
+				if (!serviceWorkerReady) {
+					renderWithBlobUrls(event.data.files);
+					return;
+				}
 				// Forward the file map to the SW for fetch interception
 				navigator.serviceWorker.controller?.postMessage({
 					type: 'files',

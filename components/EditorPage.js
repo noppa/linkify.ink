@@ -279,7 +279,7 @@ export default function EditorPage() {
 			<div class="topbar">
 				<a class="logo" href="/about">
 					<div class="logo-dot"></div>
-					linkify.ink
+					<span class="logo-name">linkify.ink</span>
 				</a>
 				<div class="topbar-actions">
 					${showSharedPreviewOnly &&

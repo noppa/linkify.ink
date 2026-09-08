@@ -133,6 +133,22 @@ export default function Preview({ files, activeFile, metadata }) {
 	// scripts. Keep that policy separate from the reader's remembered HTML choice.
 	const previewNoJs = isHtmlPreview ? noJs : true;
 
+	// Whether the running sandbox had to fall back to rendering from blob: URLs
+	// because its service worker was refused (Safari blocks them in a
+	// cross-origin frame). Only the HTML path notices — a rendered markdown, code
+	// or text preview is a single self-contained document either way.
+	const [swFallback, setSwFallback] = useState(false);
+	useEffect(() => {
+		/** @param {MessageEvent} event */
+		function onSandboxReady(event) {
+			if (event.data?.type !== 'sandbox-ready') return;
+			if (event.origin !== sandboxRef.current?.origin) return;
+			setSwFallback(event.data.serviceWorker === false);
+		}
+		window.addEventListener('message', onSandboxReady);
+		return () => window.removeEventListener('message', onSandboxReady);
+	}, []);
+
 	// Warm up the preview-only bundle in the background as soon as the preview
 	// mounts, so the first markdown render doesn't wait on a cold fetch.
 	useEffect(() => {
@@ -195,6 +211,13 @@ export default function Preview({ files, activeFile, metadata }) {
 					<${Icon} name="code" /> js ${noJs ? 'off' : 'on'}
 				</button>`}
 			</div>
+			${swFallback &&
+			isHtmlPreview &&
+			html`<div class="preview-notice">
+				<${Icon} name="info" /> Limited preview: this browser blocks the
+				sandbox's service worker, so files requested from inside CSS or
+				JavaScript won't load.
+			</div>`}
 			<iframe
 				ref=${iframeRef}
 				class="preview-iframe"
