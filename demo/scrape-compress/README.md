@@ -172,7 +172,7 @@ Ablations off the merged strategy, one change at a time:
 | drop `margin:auto` recovery | ±0.1% |
 
 Only the property allowlist matters, and it matters enormously — Bulma goes from
-5,827 to 16,616 characters when every computed property is copied instead of the
+5,827 to 16,597 characters when every computed property is copied instead of the
 ~120 visual ones. Inheritance pruning, interestingly, barely affects the *link*
 (zstd again) but is load-bearing for correctness — without it Bootstrap and Pico
 lose 1.2% and 1.7% of their pixels — and it cuts the raw document enough to
