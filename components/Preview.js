@@ -89,11 +89,12 @@ const HIGHLIGHT_LANGUAGE_BY_EXTENSION = {
 export default function Preview({ files, activeFile, metadata }) {
 	const iframeRef = useRef(/** @type {HTMLIFrameElement | null} */ (null));
 	const sandboxRef = useRef(/** @type {Sandbox | null} */ (null));
-	// Whether to withhold allow-scripts from the previewed document. A link can ask
-	// for this with `nojs: 1` (the browser extension sets it on every capture), but
-	// the reader gets the final say in both directions — metadata is written by
-	// whoever made the link, so it is a sensible default and nothing more. The real
-	// isolation is the throwaway sandbox origin, which applies either way.
+	// Whether to block scripts in the previewed document (the sandbox applies this
+	// as a script-src 'none' CSP). A link can ask for this with `nojs: 1` (the
+	// browser extension sets it on every capture), but the reader gets the final
+	// say in both directions — metadata is written by whoever made the link, so it
+	// is a sensible default and nothing more. The real isolation is the throwaway
+	// sandbox origin, which applies either way.
 	const [noJs, setNoJs] = useState(Boolean(metadata?.nojs));
 
 	// Metadata lands asynchronously — a link's files are decoded after this
@@ -188,8 +189,9 @@ export default function Preview({ files, activeFile, metadata }) {
 	// deliberately not the place to control scripts. allow-scripts is load-bearing
 	// here: this frame loads sandbox-loader.html, whose script registers the service
 	// worker that serves every previewed file — withhold it and there is no preview
-	// at all. The loader re-applies a narrower set to the nested frame that actually
-	// holds the content. allow-popups is needed for target=_blank links (which
+	// at all. The same goes for the nested frame the loader puts the content in, so
+	// js-off is applied to the content document as a CSP instead (see
+	// sandbox-loader.html). allow-popups is needed for target=_blank links (which
 	// captured articles put on every external link) to do anything when clicked; a
 	// nested frame cannot grant itself what is withheld here.
 	return html`
@@ -240,7 +242,7 @@ export default function Preview({ files, activeFile, metadata }) {
  *
  * @param {HTMLIFrameElement} iframe
  * @param {FileEntry} file
- * @param {boolean} nojs — withhold allow-scripts from the previewed document
+ * @param {boolean} nojs — block scripts in the previewed document
  * @param {{ current: FileEntry[] }} filesRef
  * @param {{ current: Sandbox | null }} sandboxRef
  * @param {() => boolean} isCancelled — true once this render is superseded
@@ -472,7 +474,7 @@ function showPreviewError(
  * @param {HTMLIFrameElement} iframe
  * @param {string} entry
  * @param {SyntheticFile | null} extra — rendered document to inject, if any
- * @param {boolean} nojs — withhold allow-scripts from the previewed document
+ * @param {boolean} nojs — block scripts in the previewed document
  * @param {{ current: FileEntry[] }} filesRef
  * @param {{ current: Sandbox | null }} sandboxRef
  */
@@ -480,9 +482,10 @@ function showInSandbox(iframe, entry, extra, nojs, filesRef, sandboxRef) {
 	const sandbox = sandboxRef.current;
 	if (sandbox && sandbox.entry === entry) {
 		// Same entry already running — just refresh the injected doc and push files.
-		// Toggling scripts doesn't need a new sandbox: the loader rebuilds the nested
-		// content frame under the new flags, and its service worker registration —
-		// the expensive part to recreate — is unaffected.
+		// Toggling scripts doesn't need a new sandbox either: the flag rides along
+		// with the files, and the loader reloads the content frame under the new
+		// policy without disturbing its service worker registration — the expensive
+		// part to recreate.
 		sandbox.extra = extra;
 		sandbox.nojs = nojs;
 		pushFiles(iframe, sandbox, filesRef);
@@ -518,7 +521,7 @@ function buildFilesData(files, extra) {
  * @param {HTMLIFrameElement} iframe
  * @param {string} entry
  * @param {SyntheticFile | null} extra
- * @param {boolean} nojs — withhold allow-scripts from the previewed document
+ * @param {boolean} nojs — block scripts in the previewed document
  * @param {{ current: FileEntry[] }} filesRef
  * @param {{ current: Sandbox | null }} sandboxRef
  */

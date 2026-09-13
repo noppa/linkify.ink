@@ -18,7 +18,8 @@
 			let pendingEntry = 'index.html';
 			// Whether the *previewed* document may run scripts. This loader always
 			// runs its own (registering the SW below is the entire preview
-			// mechanism), so the switch lives on the nested content frame instead.
+			// mechanism), so the switch is applied to the nested content document as
+			// a Content-Security-Policy — see showEntry.
 			let pendingNoJs = false;
 			let registration = null;
 			// Bumped on each (re)render so the nested iframe URL always changes and
@@ -91,41 +92,32 @@
 			// (and keeps the SW registration) for the life of the preview, rather than
 			// navigating itself away with location.replace.
 			//
-			// This nested frame is also where script execution is decided. Sandbox flags
-			// only ever narrow going inward — a nested context cannot grant itself
-			// something its parent withheld — so withholding allow-scripts here is
-			// enforced by the browser, not by cooperation from the content.
+			// allow-scripts is on this frame even in JS-off mode, and the flags never
+			// change: script execution is decided by a script-src 'none' CSP on the
+			// previewed document instead — set as a header by the service worker, or
+			// as a meta tag by the blob fallback below. Withholding allow-scripts
+			// looks stricter, but it takes the preview out with it: a frame that
+			// can't run scripts isn't controlled by a service worker in Safari, so
+			// the navigation below bypasses the worker that serves every file in the
+			// preview and lands on a blank document. CSP is enforced by the browser
+			// just as sandbox flags are; what it costs is that it has to be attached
+			// to each response rather than declared once on the frame.
 			//
-			// allow-same-origin is not optional: a sandboxed document on an opaque
-			// origin is not controlled by a service worker, and the SW is what serves
-			// every file in the preview. Without it the frame loads nothing at all.
-			// allow-popups keeps target=_blank links clickable (captured articles set it
-			// on every external link), and -to-escape-sandbox means the tab they open is
-			// an ordinary tab rather than another sandboxed one.
-			const CONTENT_SANDBOX = 'allow-same-origin allow-popups allow-popups-to-escape-sandbox';
-			const CONTENT_SANDBOX_WITH_SCRIPTS = CONTENT_SANDBOX + ' allow-scripts';
+			// allow-same-origin is not optional either: a sandboxed document on an
+			// opaque origin is not controlled by a service worker anywhere, so the
+			// frame would again load nothing at all. allow-popups keeps target=_blank
+			// links clickable (captured articles set it on every external link), and
+			// -to-escape-sandbox means the tab they open is an ordinary tab rather
+			// than another sandboxed one.
+			const CONTENT_SANDBOX =
+				'allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox';
 
-			function showEntry(src, scriptsBlockedByCsp = false) {
+			function showEntry(src) {
 				let frame = document.getElementById('content');
-				// Safari's blob fallback needs allow-scripts on the frame even when the
-				// preview is in JS-off mode. In that path the generated document carries
-				// a script-src 'none' CSP instead, so author scripts remain disabled.
-				const sandboxFlags =
-					pendingNoJs && !scriptsBlockedByCsp
-						? CONTENT_SANDBOX
-						: CONTENT_SANDBOX_WITH_SCRIPTS;
-				// Sandbox flags are read at navigation time, and this frame is reused
-				// across edits — so a frame created under the old flags is thrown away
-				// rather than mutated, which keeps the applied flags and the attribute
-				// impossible to disagree.
-				if (frame && frame.getAttribute('sandbox') !== sandboxFlags) {
-					frame.remove();
-					frame = null;
-				}
 				if (!frame) {
 					frame = document.createElement('iframe');
 					frame.id = 'content';
-					frame.setAttribute('sandbox', sandboxFlags);
+					frame.setAttribute('sandbox', CONTENT_SANDBOX);
 					document.body.appendChild(frame);
 				}
 				frame.src = src || '/' + pendingEntry + '?__preview=' + ++renderCount;
@@ -169,10 +161,7 @@
 				}
 
 				const source = new TextDecoder().decode(entryBytes);
-				showEntry(
-					mintBlobUrl(rewriteReferences(source, urlByName), 'text/html'),
-					pendingNoJs,
-				);
+				showEntry(mintBlobUrl(rewriteReferences(source, urlByName), 'text/html'));
 			}
 
 			function mintBlobUrl(data, type) {
@@ -237,10 +226,12 @@
 					renderWithBlobUrls(event.data.files);
 					return;
 				}
-				// Forward the file map to the SW for fetch interception
+				// Forward the file map to the SW for fetch interception, along with the
+				// JS-off flag it turns into a script-src 'none' header on every file.
 				navigator.serviceWorker.controller?.postMessage({
 					type: 'files',
 					files: event.data.files,
+					nojs: pendingNoJs,
 				});
 			});
 

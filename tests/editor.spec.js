@@ -218,6 +218,38 @@ test.describe('editor page', () => {
 		await expect(preview.locator('code .hljs-keyword').first()).toHaveText('def');
 	});
 
+	test('serves a js-off preview from the service worker with scripts still sandboxed in', async ({
+		page,
+	}) => {
+		// The js-off switch is a script-src 'none' CSP on the served document, not a
+		// withheld allow-scripts: a frame that can't run scripts isn't controlled by
+		// a service worker in Safari, so the preview came up blank there.
+		const consoleMessages = /** @type {string[]} */ ([]);
+		page.on('console', (message) => consoleMessages.push(message.text()));
+		await page.goto('/');
+		await page.getByRole('button', { name: 'Toggle sidebar' }).click();
+		await page.locator('#starter-select').selectOption('webpage');
+		await page
+			.locator('.editor-textarea')
+			.fill('<h1>Hello</h1><script>document.body.dataset.ran = "yes"</script>');
+		await page.locator('.editor-textarea').blur();
+
+		const loader = page.frameLocator('.preview-iframe');
+		const preview = loader.frameLocator('#content');
+		await expect(preview.locator('body')).toHaveAttribute('data-ran', 'yes');
+
+		await page.getByRole('button', { name: /js on/i }).click();
+		await expect(preview.locator('body')).not.toHaveAttribute('data-ran', 'yes');
+		await expect(preview.locator('h1')).toHaveText('Hello');
+		await expect(loader.locator('#content')).toHaveAttribute(
+			'sandbox',
+			/allow-scripts/,
+		);
+		expect(consoleMessages).not.toContainEqual(
+			expect.stringContaining("'allow-scripts' permission is not set"),
+		);
+	});
+
 	test('shared links open in preview on desktop and can open the full workspace', async ({
 		page,
 	}) => {

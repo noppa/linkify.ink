@@ -2,6 +2,12 @@
 
 /** @type {Map<string, Uint8Array>} */
 const files = new Map();
+// Whether the previewed document is in JS-off mode. Scripts are blocked with a
+// Content-Security-Policy header on everything served below rather than by
+// withholding allow-scripts from the frame: a sandboxed frame that cannot run
+// scripts isn't controlled by a service worker in Safari, so the navigation
+// would miss this worker entirely and the preview would come up blank.
+let noJs = false;
 
 self.addEventListener('install', () => {
 	// @ts-ignore
@@ -15,6 +21,7 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('message', (event) => {
 	if (!event.data || event.data.type !== 'files') return;
+	noJs = Boolean(event.data.nojs);
 	files.clear();
 	for (const [name, bytes] of Object.entries(event.data.files)) {
 		const normalized = '/' + String(name).replace(/^\//, '');
@@ -29,18 +36,24 @@ self.addEventListener('fetch', (event) => {
 	const path = pathname === '/' ? '/index.html' : pathname;
 	const data = files.get(path);
 	if (data !== undefined) {
-		/** @type {FetchEvent} */ (event).respondWith(
-			new Response(data, {
-				headers: {
-					'Content-Type': mimeFor(path),
-					// Live-editing preview: the same URLs (e.g. /style.css, /app.js) are
-					// re-served with new contents on every edit. Without no-store the
-					// browser's HTTP cache serves the original subresources back, so CSS/JS
-					// edits don't show up (the HTML document revalidates, subresources don't).
-					'Cache-Control': 'no-store',
-				},
-			}),
-		);
+		/** @type {Record<string, string>} */
+		const headers = {
+			'Content-Type': mimeFor(path),
+			// Live-editing preview: the same URLs (e.g. /style.css, /app.js) are
+			// re-served with new contents on every edit. Without no-store the
+			// browser's HTTP cache serves the original subresources back, so CSS/JS
+			// edits don't show up (the HTML document revalidates, subresources don't).
+			'Cache-Control': 'no-store',
+		};
+		// Sent on every file, not just the entry document: a document nested inside
+		// the preview (an iframe, an SVG opened as a frame) is a separate document
+		// with a policy of its own, and each one is served from right here. Frames
+		// with a local URL — data:, blob:, srcdoc — inherit their embedder's policy,
+		// so those are covered too.
+		if (noJs) {
+			headers['Content-Security-Policy'] = "script-src 'none'; object-src 'none'";
+		}
+		/** @type {FetchEvent} */ (event).respondWith(new Response(data, { headers }));
 	}
 	// Unknown path — fall through (network will 404; SW handled what it knows)
 });

@@ -32,6 +32,19 @@ export default {
 			});
 		}
 
+		if (url.pathname !== '/') {
+			// Every other path on this origin is a preview file, and those are served
+			// by the service worker from what the parent posted in. A request that
+			// reaches the network means the worker didn't have it, so 404 it — handing
+			// back the loader instead would run a second loader inside the preview,
+			// and its pagehide would unregister the service worker the preview runs on.
+			// Mirrors dev-server.mjs, which 404s the same paths locally.
+			return new Response('Not found (sandbox)', {
+				status: 404,
+				headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+			});
+		}
+
 		return new Response(LOADER_HTML, {
 			headers: {
 				'Content-Type': 'text/html; charset=utf-8',
