@@ -17,7 +17,12 @@
 // actual scraped pages would be better, and should be the next measurement once
 // one is available.
 
-const LOREM = [
+// Exported so encoding-test.mjs can strip it out of a held-out dictionary. Every
+// fixture draws from the same pool, which is fine for size and fidelity work and
+// is *not* fine for dictionary work: a dictionary built from four fixtures would
+// contain the fifth one's prose verbatim and report a saving nothing in
+// production could reproduce.
+export const PROSE = [
 	'The link is the file, which means the only budget that matters is the one the URL has.',
 	'Everything runs client side; there is no upload, no bucket, and nothing to take down.',
 	'Compression is the whole game once the format stops wasting bytes on structure.',
@@ -26,7 +31,7 @@ const LOREM = [
 ];
 
 /** @param {number} i */
-const para = (i) => LOREM[i % LOREM.length];
+const para = (i) => PROSE[i % PROSE.length];
 
 /** Build `n` items with a template. @param {number} n @param {(i:number)=>string} fn */
 const times = (n, fn) => Array.from({ length: n }, (_, i) => fn(i)).join('\n');

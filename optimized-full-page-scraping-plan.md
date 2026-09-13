@@ -28,6 +28,11 @@ A working demo with full measurements lives in
 [`demo/scrape-compress/`](demo/scrape-compress/). This document is the plan; that
 directory is the evidence.
 
+Measured against the current capture, the rebuild alone is worth **6–11×**. Two
+further levers, both of which depend on linkify.ink controlling the code at both
+ends of a link, are worth another **20–30%** on top: a zstd dictionary (step 7,
+the bigger of the two) and the compact tree encoding (step 5).
+
 ---
 
 ## Status
@@ -101,12 +106,12 @@ implementation needs to treat the reset as load-bearing and test it directly.
 
 Group the per-element declaration sets into shared classes and emit a stylesheet.
 
-### Step 4 — Share classes between elements *(candidate for abandonment — see below)*
+### Step 4 — Share classes between elements *(keep only the cheap form — see below)*
 
 Merge declarations across elements so a declaration appears once in the
 stylesheet rather than once per element that uses it.
 
-### Step 5 — Compact tree encoding *(candidate for abandonment — see below)*
+### Step 5 — Compact tree encoding *(worth doing, but not first — see below)*
 
 Replace HTML with a denser custom form, e.g.
 
@@ -114,14 +119,20 @@ Replace HTML with a denser custom form, e.g.
 (div.a.b "Hello "(i.a.c "world"))
 ```
 
-decoded back to `<div class="a b">Hello <i class="a c">world</i></div>` by a
-small script shipped inside the capture.
+decoded back to `<div class="a b">Hello <i class="a c">world</i></div>`. The
+decoder lives in linkify.ink's own preview code, not in the payload.
 
 ### Step 6 — Declare the capture width
 
 Emit `<meta name="viewport" content="width=1280">` (the width the capture was
 taken at) rather than `width=device-width`. See
 [Responsiveness](#responsiveness-is-not-recoverable).
+
+### Step 7 — A zstd dictionary *(not in the original sketch; the largest single lever)*
+
+Compress with a fixed dictionary shipped in the extension and the preview, so
+every link stops paying for the reset rule, the document boilerplate, and the
+several hundred CSS property names and values that every capture contains.
 
 ---
 
@@ -138,6 +149,8 @@ not appear to exist.
 | [OptiCSS](https://github.com/linkedin/opticss) / [css-blocks](https://github.com/linkedin/css-blocks) | Step 4 done properly. Its `mergeDeclarations` pass finds declarations shared across rules, factors them into new classes, and rewrites the markup so the cascade resolves identically. The algorithm we would want if step 4 were worth doing. | A build-time Node/PostCSS tool driven by static template analysis. Not something to run in a content script, and the measurements below say the win it chases isn't there for us anyway. |
 | [StyleX](https://stylexjs.com/), Tailwind, Atomizer | Step 4's opposite corner: one declaration per class, dedupe by construction. | The original hunch about StyleX — that one-class-per-rule wastes characters repeating class names in the markup — is **confirmed and then some**. Atomic is the *worst* of four strategies measured, 12–18% behind. |
 | [rrweb](https://github.com/rrweb-io/rrweb) | Step 5: a compact non-HTML DOM serialization with a decoder at the far end. | Optimised for incremental mutation replay over a session, not for one-shot compressed size. |
+| [Pug](https://pugjs.org/) via [html2pug](https://github.com/donpark/html2pug) | Step 5, off the shelf — and it genuinely works. `html2pug` emits real Pug (`h2.a.b.c Heading 1`, closing tags dropped) and `pug.render` returns HTML that renders at 0.0% pixel difference, for 4–5% smaller links. | It is a Turing-complete template engine: `pug.render` on a link payload is arbitrary code execution in the preview origin. **Rejected on security, not on size.** See below. |
+| [zstd dictionaries](https://github.com/facebook/zstd#the-case-for-small-data-compression) | Step 7. Not in the original sketch and the biggest lever found: 9–31% off every link, with no change to the payload format. The vendored `@bokuweb/zstd-wasm` already exports `compressUsingDict`/`decompressUsingDict`. | Needs a versioned dictionary that can never be retired without breaking every link that used it. |
 
 Two things worth noting from the search that shaped the design:
 
@@ -212,10 +225,13 @@ before it could run anywhere automatic.
 
 ---
 
-## Steps 4 and 5 — the parts we should probably abandon
+## Steps 4, 5 and 7 — what to keep, drop and add
 
-Both were in the original sketch. Both were implemented and measured. Both are
-worth less than they look, and step 5 is worth less than nothing.
+Steps 4 and 5 were both in the original sketch; both were implemented and
+measured. Step 4 is worth much less than it looks. Step 5 is worth a solid 5–7%
+— once its decoder is hosted in the preview rather than shipped in every link,
+which is a correction to the first version of this plan. Step 7 was not in the
+sketch at all and is worth more than either.
 
 ### Step 4 — class sharing is worth ~0% on small pages
 
@@ -277,38 +293,118 @@ The greedy biclique-cover refinement that OptiCSS performs (factoring out
 `merged` and `inline`, which the table shows is ~1%. That is not worth an
 NP-hard search running in a content script.
 
-### Step 5 — the compact tree encoding is a net loss
+### Step 5 — the compact tree encoding is worth ~6%, but a dictionary is worth ~3–5× that
 
-The s-expression form was implemented, along with an 891-byte decoder. Measuring
-the encoding in isolation (same capture, serialized both ways, compressed alone,
-no stylesheet, no decoder):
+The first measurement of step 5 put the decoder *inside* the payload and
+concluded it was a net loss: the format saved 104–200 characters and the decoder
+cost 725. **That framing was wrong.** linkify.ink owns the preview code, so a
+decoder ships there once instead of in every link, and a format only has to be
+smaller — not smaller by 725 characters.
 
-| fixture | HTML | s-expr | saving | saving % |
-| --- | ---: | ---: | ---: | ---: |
-| bootstrap-dashboard | 4,019 | 3,819 | 200 | 5.0% |
-| bulma-landing | 3,435 | 3,283 | 152 | 4.4% |
-| pico-docs | 3,069 | 2,887 | 182 | 5.9% |
-| markdown-article | 2,324 | 2,180 | 144 | 6.2% |
-| utility-app | 2,157 | 2,053 | 104 | 4.8% |
+Re-measured with the decoder hosted (`demo/scrape-compress/encoding-test.mjs`),
+every payload carrying the same information and verified to render to the same
+pixels before being priced:
 
-The encoding is ~20% smaller *raw* and only **4–6% smaller compressed**, for the
-same reason as step 4: zstd was already handling `</div>`. The decoder costs
-**725 characters** through the pipeline.
+| fixture | HTML | s-expr | | Pug | | Pug round-trip |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| bootstrap-dashboard | 6,552 | 6,217 | −5.1% | 6,248 | −4.6% | 0.0% pixel diff |
+| bulma-landing | 5,827 | 5,528 | −5.1% | 5,576 | −4.3% | 0.0% pixel diff |
+| pico-docs | 5,151 | 4,813 | −6.6% | 4,885 | −5.2% | 0.0% pixel diff |
+| markdown-article | 3,996 | 3,728 | −6.7% | 3,828 | −4.2% | 0.0% pixel diff |
+| utility-app | 3,456 | 3,224 | −6.7% | 3,283 | −5.0% | 0.0% pixel diff |
 
-So the format must save >725 characters to break even, and it saves 104–200. It
-is a **net loss on every fixture**, and stays one until a page is roughly four
-times larger than the largest here.
+So the format is worth a real **5–7%**.
 
-**Recommendation: abandon step 5.** Revisit only if captures routinely exceed
-~15,000 characters, where the 4–6% would clear the fixed decoder cost. Note that
-at that size the link is already unusable for other reasons, so the honest read
-is "abandon".
+#### Pug works, and should still be rejected
 
-There is a second argument against it beyond size: HTML output means a capture is
-inspectable, debuggable, and renders in any browser with no script at all. The
-preview sandbox already blocks scripts by default (`nojs: 1`), and a tree
-encoding would make the capture *depend* on script execution to display
-anything.
+Using an existing format rather than inventing one is the right instinct, and Pug
+delivers: `html2pug` → `pug.render` round-trips these captures at **0.0% pixel
+difference** for 4–5% smaller links, most of the bespoke format's win with none
+of the bespoke format's maintenance.
+
+It is still the wrong choice here, for a reason that has nothing to do with size.
+Pug is a Turing-complete template engine, and link payloads are untrusted by
+definition:
+
+```
+$ node -e "pug.render(\"- globalThis.__PWNED = 'yes'\np= 1+1\")"
+__PWNED = yes
+```
+
+Compiling a payload with Pug is arbitrary code execution in the preview origin,
+which defeats the sandbox's `nojs` default outright. A safe Pug path would mean
+driving `pug-lexer`/`pug-parser` directly and rejecting every code node — at
+which point it is no longer "just use Pug", and the bespoke decoder is ~40 lines
+with no `eval`, saves slightly more, and adds 23 MB less to the preview bundle.
+
+**Recommendation: keep the s-expression format, but ship it after step 7.**
+
+### Step 7 — a zstd dictionary, the lever the sketch missed
+
+The "we control both ends" argument that rescues step 5 applies just as well to
+compression, and pays much better. zstd accepts a **raw content dictionary** —
+arbitrary bytes, no training format required — and the already-vendored
+`@bokuweb/zstd-wasm` exports `compressUsingDict`/`decompressUsingDict`. No new
+dependency.
+
+Same HTML payload, same pipeline, different compressor state:
+
+| fixture | zstd-19 | + house dict | + corpus dict | *(prose leak)* | brotli-11 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| bootstrap-dashboard | 6,552 | 5,964 (−9.0%) | 5,304 (−19.0%) | *4,948* | 5,585 (−14.8%) |
+| bulma-landing | 5,827 | 5,256 (−9.8%) | 4,653 (−20.1%) | *4,320* | 5,053 (−13.3%) |
+| pico-docs | 5,151 | 4,629 (−10.1%) | 3,799 (−26.2%) | *3,517* | 4,383 (−14.9%) |
+| markdown-article | 3,996 | 3,460 (−13.4%) | 2,767 (−30.8%) | *2,441* | 3,281 (−17.9%) |
+| utility-app | 3,456 | 2,876 (−16.8%) | 2,572 (−25.6%) | *2,213* | 2,828 (−18.2%) |
+
+- **house dict** is a hand-written ~2 KB constant: the reset rule verbatim, the
+  document boilerplate, and the CSS property names and values a computed-style
+  capture emits by the hundred. It contains no fixture content, so this number is
+  clean and shippable as-is.
+- **corpus dict** is every *other* fixture's capture concatenated, standing in for
+  a dictionary trained on real captures.
+- The *prose leak* column is the same measurement done carelessly, and is here as
+  a warning rather than a result. All five fixtures draw from one prose pool, so
+  a merely held-out dictionary still contains the test page's sentences verbatim
+  — worth 6–10 points of imaginary saving. Holding out the fixture was not
+  enough; a dictionary that has already seen the article it is compressing is a
+  cache, not a dictionary.
+
+**brotli-11 beating zstd-19 by 13–18% with no dictionary at all is the same
+finding restated**: brotli ships a static dictionary of common HTML fragments,
+which is exactly what the house dictionary hand-builds. Confirmation of the
+mechanism, not a separate option — a zstd dictionary beats it, and switching
+codec would break every existing link.
+
+### The two stack
+
+| fixture | HTML | s-expr | HTML+house | s-expr+house | s-expr+corpus |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| bootstrap-dashboard | 6,552 | 6,217 | 5,964 | 5,716 | **5,253** (−19.8%) |
+| bulma-landing | 5,827 | 5,528 | 5,256 | 5,056 | **4,644** (−20.3%) |
+| pico-docs | 5,151 | 4,813 | 4,629 | 4,380 | **3,820** (−25.8%) |
+| markdown-article | 3,996 | 3,728 | 3,460 | 3,281 | **2,817** (−29.5%) |
+| utility-app | 3,456 | 3,224 | 2,876 | 2,773 | **2,577** (−25.4%) |
+
+Together they would take the corpus from 3,456–6,552 characters to roughly
+**2,600–5,300**, on top of the 6–11× already won against the current capture.
+
+### What both of them cost
+
+A payload that needs a hosted dictionary is exactly as un-openable-on-its-own as
+one that needs a hosted decoder. Both trade the project's "a link is a file you
+can decode anywhere" property for size; the dictionary is the better trade only
+because it buys 3–5× more per unit given up. Two consequences either way:
+
+- **Versioning is permanent.** The format version already lives in the flag byte
+  (`FORMAT_VERSION`, currently 1). A dictionary or tree-format version must go
+  there too, and once shipped it **can never be retired** — every link minted
+  under it would stop decoding. Both should be published alongside the format
+  description so the README's claim that the decoding logic is simple enough to
+  reimplement stays true.
+- **The dictionary is not scrape-specific.** It would help every linkify.ink
+  payload, and a generic one helps less than a scrape-tuned one. Worth selecting
+  per content type with a byte rather than shipping a single compromise.
 
 ---
 
@@ -349,9 +445,9 @@ sense that matters, since today's capture only reflows correctly when its
 
 ```js
 {
-  strategy: 'merged',     // step 4, cheap form only
-  tree: 'html',           // step 5 abandoned
-  props: 'visual',        // ~120-property allowlist; the one big lever
+  strategy: 'merged',     // step 4, cheap equivalence-grouping form only
+  tree: 'html',           // step 5: switch to 'sexp' once the preview hosts a decoder
+  props: 'visual',        // ~120-property allowlist; the one big lever in the capture
   sizing: 'all',          // pixel-exact; @media is unrecoverable anyway
   pseudo: true,           // ::before/::after
   inheritPrune: true,
@@ -359,6 +455,10 @@ sense that matters, since today's capture only reflows correctly when its
   fitViewport: true,      // <meta viewport content="width=<capture width>">
 }
 ```
+
+Plus, at the pipeline rather than the capture: a versioned zstd dictionary
+(step 7). That is worth 9–31% on its own against the 5–7% the tree format buys,
+for the same kind of commitment, so it should ship first.
 
 ---
 
@@ -409,6 +509,14 @@ are also true of the current capture.
    its value is that it *discards* the page's design rather than reproducing it.
 5. **Capture-time cost on a slow device.** 370 ms was measured in headless
    Chromium on a server. A mid-range phone could be several times that.
+6. **How much does a dictionary generalise?** The house dictionary was written
+   against this corpus's captures. A real corpus will have different common
+   values (design-system colours, different font stacks), and the honest test is
+   a dictionary built from one set of real pages and measured on another.
+7. **Is giving up self-containment acceptable at all?** Both step 5 and step 7
+   make a payload undecodable without linkify.ink's own constants. That is a
+   product decision, not a technical one, and it should be made once — before
+   either ships — rather than drifted into.
 
 ---
 
@@ -443,20 +551,40 @@ are also true of the current capture.
   width is simplest; capturing at a fixed width would make links more consistent
   but requires resizing the tab.
 
-### Phase 3 — Surface it
+### Phase 3 — Compression (step 7), the largest remaining win
 
-- **3.1** Extension UI: this becomes the default for full-page capture, with the
+- **3.1** Add a dictionary slot to the payload format: a version byte alongside
+  `FORMAT_VERSION`, `0` meaning "no dictionary" so every existing link keeps
+  decoding untouched.
+- **3.2** Ship the hand-written house dictionary (−9% to −17%, measured) as a
+  committed constant used by both `extension/` and the preview. Route it through
+  `compressUsingDict`/`decompressUsingDict`, which the vendored wasm already
+  exports.
+- **3.3** Once Phase 1 has a corpus of real captures, train a dictionary on it
+  and measure against a properly held-out set — held out of *content*, not just
+  of page identity. Expect somewhere near the −19% to −31% measured here, and
+  treat any number closer to the prose-leak column as a bug in the experiment.
+- **3.4** Publish the dictionary and its version alongside the format
+  description, so a link stays decodable by a reimplementation.
+
+### Phase 4 — Surface it
+
+- **4.1** Extension UI: this becomes the default for full-page capture, with the
   current behaviour kept as an escape hatch (it preserves interactivity and media
   queries, which this does not).
-- **3.2** Tell the user what they get — a static snapshot at a given width, with
+- **4.2** Tell the user what they get — a static snapshot at a given width, with
   no scripts and no external dependencies.
-- **3.3** Playwright coverage: a fixture page, a capture, and a pixel-diff
+- **4.3** Playwright coverage: a fixture page, a capture, and a pixel-diff
   assertion, so the reset rule cannot silently regress the way `white-space` did.
 
-### Phase 4 — Follow-ups worth considering
+### Phase 5 — Step 5, and other follow-ups
 
-- **4.1** Full-page-height capture: scroll the page to trigger lazy-loaded
+- **5.1** The s-expression tree (−5% to −7%): decoder in the preview, another
+  version byte, and the same never-retire commitment as the dictionary. Worth
+  doing, worth doing last — it is the smallest win of the three for the same
+  loss of self-containment.
+- **5.2** Full-page-height capture: scroll the page to trigger lazy-loaded
   content before walking.
-- **4.2** An element-scoped version of the same method, to pair with the existing
+- **5.3** An element-scoped version of the same method, to pair with the existing
   **Pick an element** flow — likely a very large win, since a single component
   carries a tiny fraction of a page's distinct styles.
