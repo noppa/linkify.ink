@@ -140,3 +140,9 @@ extension/vendor/
 /test-results/
 /playwright-report/
 /blob-report/
+
+# Scraping/compression demo: fetched third-party stylesheets and measurement output.
+# Both are reproducible — see demo/scrape-compress/README.md.
+demo/scrape-compress/fixtures/vendor/
+demo/scrape-compress/out/
+demo/scrape-compress/.npm-staging/
