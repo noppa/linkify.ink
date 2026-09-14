@@ -1,8 +1,12 @@
 # Computed-style page capture — a demo
 
-An experiment in replacing full-page capture in the extension. Nothing here is
-wired into `extension/`; it is a standalone harness that captures pages, packs
-them through the real `LinkifyInk` pipeline, and measures what comes out.
+An experiment in replacing full-page capture in the extension — since adopted:
+`extension/content/capture.js`'s full mode is now this method, in the
+configuration recommended at the end. This directory is the standalone harness
+that got it there: it captures pages, packs them through the real `LinkifyInk`
+pipeline, and measures what comes out. The "current extension" rows below were
+measured against the old serialize-the-page capture, which no longer exists;
+`run.mjs`'s current-extension row now measures the shipped implementation.
 
 ```
 node demo/scrape-compress/setup-fixtures.mjs   # fetch the real stylesheets, once

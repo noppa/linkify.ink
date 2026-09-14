@@ -37,10 +37,19 @@ the bigger of the two) and the compact tree encoding (step 5).
 
 ## Status
 
-**Validated by demo, not yet implemented.** Nothing in `extension/` has changed.
+**Phase 2 shipped; Phases 1, 3 and 5 open.** `extension/content/capture.js`'s
+full mode is now the computed-style capture, in the recommended configuration
+below, and the old serialize-the-page implementation is gone (it was never a
+feasible size). Beyond the demo it also flattens shadow DOM, inlines `<use>`
+sprite references, emits `@font-face` rules, keeps live form state, and yields
+to the page between batches of elements. `tests/capture.spec.js` is the
+reset-rule regression guard from 4.3. The zstd dictionary (Phase 3) and the
+compact tree (5.1) are not built.
+
 The numbers below come from `demo/scrape-compress/run.mjs`, which captures real
 pages in headless Chromium, packs the result through the real `LinkifyInk`
-pipeline, and pixel-diffs the rebuilt page against the live one.
+pipeline, and pixel-diffs the rebuilt page against the live one. Its "current
+extension" row now measures the shipped implementation rather than the old one.
 
 The one caveat that matters: the corpus is five hand-written pages over
 **unmodified shipped stylesheets** (Bootstrap 5.3, Bulma 1.0, Pico 2.1,

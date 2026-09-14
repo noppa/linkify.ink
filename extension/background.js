@@ -91,10 +91,12 @@ async function captureTab(tabId, options) {
 		target: { tabId },
 		// Errors are caught and returned rather than thrown: a throw inside an
 		// injected function surfaces inconsistently across Chrome versions, and the
-		// messages here are written to be shown to the user verbatim.
-		func: (opts) => {
+		// messages here are written to be shown to the user verbatim. The capture is
+		// async (full mode yields to the page between batches of elements) and
+		// executeScript settles a returned promise before reporting the result.
+		func: async (opts) => {
 			try {
-				return { ok: /** @type {const} */ (true), capture: globalThis.__linkifyInkCapture(opts) };
+				return { ok: /** @type {const} */ (true), capture: await globalThis.__linkifyInkCapture(opts) };
 			} catch (e) {
 				return {
 					ok: /** @type {const} */ (false),
@@ -170,9 +172,9 @@ async function fetchImageAsWebp(url) {
  * out of the attribute and the index makes it unique within the capture.
  *
  * The whole attribute is matched rather than the `<img src="…"` prefix article
- * mode used to guarantee: full mode keeps the tag's original attributes, so `src`
- * lands wherever it already was. Anchoring on the tag there would match nothing
- * and leave the markup pointing at an archive entry that was never written.
+ * mode used to guarantee: full mode writes an image's generated class and style
+ * before its `src`. Anchoring on the tag there would match nothing and leave the
+ * markup pointing at an archive entry that was never written.
  *
  * @param {string} html
  * @param {string} name the image's archive path, e.g. `assets/img-3.webp`
@@ -284,15 +286,13 @@ async function captureToLink(options) {
 		password: options.password,
 		// Metadata is stored *uncompressed* in the payload, so only fields that
 		// earn their bytes go in. `preview` names the file to show; `nojs: 1` asks
-		// the preview not to run the capture's scripts.
+		// the preview not to run scripts.
 		//
-		// Set on every capture, not just full-page ones. A captured page is a
-		// snapshot of an already-rendered DOM — running its scripts can only take
-		// it further from what the user saw (hydration against markup React no
-		// longer recognizes, ad loaders re-fetching, analytics firing for a reader
-		// who never visited). Article mode strips scripts anyway, so there the flag
-		// costs eight bytes to say the same thing twice, which is cheaper than
-		// having the guarantee depend on which mode produced the link.
+		// Neither mode ships a script any more — article mode strips them, full
+		// mode rebuilds the page from computed styles and never copies them — so
+		// the flag is eight bytes of belt-and-braces: the preview's default stays
+		// "off" even for a capture that somehow carried one, and it does not depend
+		// on which mode produced the link.
 		//
 		// This is a default, not a boundary: metadata is author-controlled, so a
 		// hostile link can simply omit it. The isolation that actually holds is the
@@ -316,6 +316,8 @@ async function captureToLink(options) {
 		droppedImages: capture.droppedImages,
 		imagesRequested: wantsImages,
 		imagePermission: hasImagePermission,
+		// The viewport width a full capture was laid out at; 0 for article mode.
+		width: capture.width,
 	};
 }
 
@@ -352,6 +354,7 @@ async function elementToLink(selection, options) {
 		droppedImages: 0,
 		imagesRequested: false,
 		imagePermission: false,
+		width: 0,
 	};
 }
 
