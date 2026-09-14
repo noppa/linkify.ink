@@ -39,7 +39,6 @@
 	 *   textLength: number,
 	 *   readerable: boolean,
 	 *   mode: 'article' | 'full',
-	 *   images: { name: string, url: string }[],
 	 *   linkedImages: number,
 	 *   droppedImages: number,
 	 *   width: number,
@@ -111,12 +110,9 @@
 	 * Strip a parsed fragment down to safe, compact markup, in place.
 	 * @param {Element} root
 	 * @param {string} base page URL, for resolving relative links
-	 * @param {'link' | 'inline'} imageMode
-	 * @returns {{ images: { name: string, url: string }[], linkedImages: number, droppedImages: number }}
+	 * @returns {{ linkedImages: number, droppedImages: number }}
 	 */
-	function sanitize(root, base, imageMode) {
-		/** @type {{ name: string, url: string }[]} */
-		const images = [];
+	function sanitize(root, base) {
 		let linkedImages = 0;
 		let droppedImages = 0;
 
@@ -154,22 +150,12 @@
 					continue;
 				}
 
-				if (imageMode === 'inline') {
-					// The extension only ever re-encodes to WebP, so the name is fixed
-					// here and the worker fills in the bytes. Keeping images as sibling
-					// archive entries (rather than data: URIs) means the preview
-					// sandbox's service worker serves them like any other project file.
-					const name = `assets/img-${images.length}.webp`;
-					images.push({ name, url: absolute });
-					replaceAttrs(el, { src: name, alt });
-					continue;
-				}
-
-				// Default: keep pointing at the original host. An absolute URL costs a
-				// hundred-odd characters against a link budget an embedded image would
-				// spend tens of thousands on, and the reader still sees the article as
-				// written. The trade is that the capture is no longer self-contained —
-				// it needs the network, and it rots when the host moves the file.
+				// Keep pointing at the original host. An absolute URL costs a hundred-odd
+				// characters where the bytes behind it would cost tens of thousands —
+				// images are already compressed, so zstd gains nothing on them — and the
+				// reader still sees the article as written. The trade is that the capture
+				// needs the network, and rots when the host moves the file. That is the
+				// deal: a link carries the page, not an archive of it.
 				linkedImages++;
 				replaceAttrs(el, { src: absolute, alt });
 				continue;
@@ -212,7 +198,7 @@
 			if (el.children.length === 0 && !el.textContent?.trim()) el.remove();
 		}
 
-		return { images, linkedImages, droppedImages };
+		return { linkedImages, droppedImages };
 	}
 
 	/**
@@ -1108,10 +1094,9 @@ ${body}
 	 * Snapshot the whole page as a computed-style capture; see the note at the top
 	 * of this section.
 	 * @param {string} base
-	 * @param {'link' | 'inline'} imageMode
-	 * @returns {Promise<{ html: string, images: { name: string, url: string }[], linkedImages: number, width: number }>}
+	 * @returns {Promise<{ html: string, linkedImages: number, width: number }>}
 	 */
-	async function captureFull(base, imageMode) {
+	async function captureFull(base) {
 		const baseline = createBaseline();
 		/** @type {string[][]} */
 		const styleSets = [];
@@ -1119,8 +1104,6 @@ ${body}
 		const pseudoStyles = [];
 		/** @type {Set<string>} */
 		const usedFamilies = new Set();
-		/** @type {{ name: string, url: string }[]} */
-		const images = [];
 		let linkedImages = 0;
 
 		// Fragment targets are the only ids worth carrying: a footnote's "back to
@@ -1251,18 +1234,9 @@ ${body}
 				const src = /** @type {HTMLImageElement} */ (el).currentSrc || el.getAttribute('src') || '';
 				const entry = attrs.find(([name]) => name === 'src');
 				if (/^https?:/i.test(src)) {
-					if (imageMode === 'inline') {
-						// The worker fills in the bytes; see sanitize() in article mode for
-						// why the name is fixed here.
-						const name = `assets/img-${images.length}.webp`;
-						images.push({ name, url: src });
-						if (entry) entry[1] = name;
-						else attrs.push(['src', name]);
-					} else {
-						linkedImages++;
-						if (entry) entry[1] = src;
-						else attrs.push(['src', src]);
-					}
+					linkedImages++;
+					if (entry) entry[1] = src;
+					else attrs.push(['src', src]);
 				}
 			} else if (el instanceof HTMLTextAreaElement) {
 				if (el.value) children.push({ kind: 'text', text: el.value });
@@ -1330,8 +1304,8 @@ ${body}
 		// to fit — the same page, smaller — where `width=device-width` would promise
 		// a reflow the document cannot perform and deliver a sideways scroll.
 		//
-		// Everything the reader sees loads from the original host — fonts, images
-		// left un-embedded — so the referrer policy is set here, once.
+		// Everything the reader sees loads from the original host — fonts and
+		// images — so the referrer policy is set here, once.
 		const html =
 			`<!doctype html><html${renderAttrs(root)}><head><meta charset="utf-8">` +
 			`<meta name="viewport" content="width=${width}">` +
@@ -1339,7 +1313,7 @@ ${body}
 			`<title>${escapeHtml(document.title)}</title>` +
 			`<style>${css}</style></head>${renderChildren(root)}</html>`;
 
-		return { html, images, linkedImages, width };
+		return { html, linkedImages, width };
 	}
 
 	// ── Entry point ──────────────────────────────────────────────────────────────
@@ -1347,16 +1321,16 @@ ${body}
 	/**
 	 * Extract the page. `mode: 'article'` runs Readability and sanitizes what it
 	 * returns; `mode: 'full'` rebuilds the rendered page from computed styles.
-	 * @param {{ mode?: 'article' | 'full', images?: 'link' | 'inline' }} [options]
+	 * @param {{ mode?: 'article' | 'full' }} [options]
 	 * @returns {Promise<Capture>}
 	 */
 	async function capture(options = {}) {
-		const { mode = 'article', images: imageMode = 'link' } = options;
+		const { mode = 'article' } = options;
 		const base = document.baseURI || location.href;
 		const readerable = LinkifyReadability.isProbablyReaderable(document);
 
 		if (mode === 'full') {
-			const { html, images, linkedImages, width } = await captureFull(base, imageMode);
+			const { html, linkedImages, width } = await captureFull(base);
 			return {
 				html,
 				title: document.title,
@@ -1366,7 +1340,6 @@ ${body}
 				textLength: document.body?.textContent?.length ?? 0,
 				readerable,
 				mode,
-				images,
 				linkedImages,
 				// Nothing is dropped in full mode — that is the point of it.
 				droppedImages: 0,
@@ -1399,7 +1372,7 @@ ${body}
 		const root = holder.getElementById('linkify-root');
 		if (!root) throw new Error('Failed to parse the extracted content');
 
-		const { images, linkedImages, droppedImages } = sanitize(root, base, imageMode);
+		const { linkedImages, droppedImages } = sanitize(root, base);
 
 		const title = article.title || document.title;
 		const html = buildDocument({
@@ -1420,7 +1393,6 @@ ${body}
 			textLength: article.length ?? 0,
 			readerable,
 			mode,
-			images,
 			linkedImages,
 			droppedImages,
 			width: 0,

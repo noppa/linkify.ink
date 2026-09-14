@@ -85,29 +85,6 @@ input {
 	font: inherit;
 }
 
-.check {
-	display: flex;
-	align-items: center;
-	gap: 7px;
-	color: var(--text);
-	font-size: 12px;
-	text-transform: none;
-	letter-spacing: normal;
-	cursor: pointer;
-}
-
-.check input {
-	flex-shrink: 0;
-	width: auto;
-	margin: 0;
-	accent-color: var(--accent);
-}
-
-.check em {
-	color: var(--text-muted);
-	font-style: normal;
-}
-
 .btn {
 	padding: 7px 10px;
 	border: 1px solid var(--border);

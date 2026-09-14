@@ -114,7 +114,7 @@ test('full-page capture reproduces the rendered page', async ({ page }) => {
 	await page.addScriptTag({ path: path.join(root, 'vendor.readability.bundle.js') });
 	await page.addScriptTag({ path: path.join(root, 'extension', 'content', 'capture.js') });
 	const capture = await page.evaluate(() =>
-		globalThis.__linkifyInkCapture({ mode: 'full', images: 'link' }),
+		globalThis.__linkifyInkCapture({ mode: 'full' }),
 	);
 
 	expect(capture.mode).toBe('full');

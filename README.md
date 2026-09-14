@@ -45,10 +45,7 @@ Everything runs client-side using web platform primitives:
 
 `extension/` holds a Chrome (MV3) extension that turns the page you're reading into a link. It extracts the article with [Readability](https://github.com/mozilla/readability) — the same extractor Firefox Reader Mode uses — writes it as a standalone `article.html`, and packs it through the same `LinkifyInk` class the site uses. Nothing is uploaded; the extension is just another consumer of the library.
 
-Use **Pick an element** when you only need one section of a busy page. It highlights
-the element under the pointer; click to make a link containing that element's exact
-`outerHTML`, or press Escape to cancel. Reopen the popup after choosing it to copy
-or open the finished link.
+The extension makes public links only. To share a capture with a password or to a recipient key, open the link in the editor and share it again from there — the same flow the site uses for any file, rather than a second copy of it in the popup.
 
 ```sh
 npm run build:extension   # bundles deps and assembles extension/vendor/
@@ -59,9 +56,7 @@ Then load it: `chrome://extensions` → Developer mode → **Load unpacked** →
 The whole design is shaped by URL length. Measured on real prose, a capture ends up at roughly **half the character count of its markup** after zstd — so a typical article lands around 8,000–15,000 characters and a very long one approaches the 32,000 mark where the site starts warning about truncation. Two consequences:
 
 - **Article-only mode is the default.** Full-page capture is there for pages Readability can't parse, or where the design is the point. It is a static snapshot rebuilt from computed styles (see below), which keeps it in the same size range as an article on simple pages; a busy page with a lot of inline SVG still gets big.
-- **Images keep their original URLs by default.** An absolute URL costs a hundred-odd characters where the bytes behind it would cost tens of thousands — images are already compressed, so zstd gains nothing on them and every byte costs ~1.33 characters of URL. The reader sees the article as written; the cost is that the capture needs the network and rots if the host moves the file.
-
-Ticking **embed images** makes the capture self-contained instead: each image is re-encoded to WebP (downscaled to 1280px on its longest edge) and stored as a sibling archive entry — `assets/img-0.webp` — which the preview sandbox serves like any other project file. There's no cap on how many or how large; the popup shows the resulting character count, and how long a link is worth sharing is your call. Anything that can't be fetched silently keeps its original URL. Embedding requests host permission at the moment you enable it, since it means fetching from whatever hosts the article points at.
+- **Images keep their original URLs.** An absolute URL costs a hundred-odd characters where the bytes behind it would cost tens of thousands — images are already compressed, so zstd gains nothing on them and every byte costs ~1.33 characters of URL; one photo outweighs the whole article. The reader sees the page as written; the cost is that the capture needs the network and rots if the host moves the file. That's the deal: a link carries the page, not an archive of it. If you want something that survives the original site going away, that's a job for [SingleFile](https://github.com/gildas-lormeau/SingleFile), not a URL.
 
 Images with no usable source — a `data:` URI, or a lazy-loading placeholder that never resolved — are the one case that's genuinely dropped, and their alt text is kept in place.
 
@@ -79,7 +74,7 @@ Full mode does not filter, because a full mode that decides what counts as clutt
 
 - **Open shadow roots are flattened** into the composed tree the browser actually draws, slots replaced by what was slotted into them.
 - **SVG ships verbatim** — geometry lives in attributes, not CSS — with `<use href="#…">` sprite references resolved, since the sprite sheet itself is `display:none` and would otherwise be dropped.
-- **`@font-face` rules for the fonts in use** are emitted with absolute URLs, so a page set in a webfont loads it while its host serves it. Same trade as linked images.
+- **`@font-face` rules for the fonts in use** are emitted with absolute URLs, so a page set in a webfont loads it while its host serves it. Same trade as images.
 - **Live form state** — what was typed, ticked and selected — is what the snapshot keeps.
 - **The capture declares the width it was taken at.** `@media` rules are not part of a computed style, so a rebuilt page cannot reflow; a phone lays it out at the capture width and scales it to fit rather than scrolling sideways.
 

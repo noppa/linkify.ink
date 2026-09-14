@@ -4,7 +4,6 @@
 	"version": "0.1.0",
 	"description": "Capture the page you're reading into a shareable linkify.ink link. Nothing is uploaded — the article lives in the URL itself.",
 	"permissions": ["activeTab", "scripting", "storage"],
-	"optional_host_permissions": ["<all_urls>"],
 	"background": {
 		"service_worker": "background.js",
 		"type": "module"
