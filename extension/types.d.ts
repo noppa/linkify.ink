@@ -6,9 +6,10 @@
 
 /**
  * What content/capture.js hands back. `html` is the finished article.html —
- * self-contained only when images were embedded; otherwise its `<img>` tags point
- * at the original host. `images` is empty unless embedding was requested, in which
- * case each entry names an archive path the worker still has to fill with bytes.
+ * self-contained only when images were embedded; otherwise its `<img>` tags (and,
+ * in full mode, any `@font-face` sources) point at the original host. `images` is
+ * empty unless embedding was requested, in which case each entry names an archive
+ * path the worker still has to fill with bytes.
  */
 export interface Capture {
 	html: string;
@@ -24,10 +25,12 @@ export interface Capture {
 	linkedImages: number;
 	/** Had no usable source (data:/blob:, or an unresolved placeholder). */
 	droppedImages: number;
+	/** Viewport width a full capture was laid out at, in CSS px; 0 in article mode. */
+	width: number;
 }
 
 export interface CaptureOptions {
-	/** 'article' runs Readability; 'full' falls back to the whole body. */
+	/** 'article' runs Readability; 'full' rebuilds the rendered page from computed styles. */
 	mode?: 'article' | 'full';
 	/** 'link' keeps the original URLs; 'inline' packs the bytes into the link. */
 	images?: 'link' | 'inline';
@@ -40,7 +43,7 @@ declare global {
 
 declare global {
 	/** Defined by content/capture.js once injected into a page. */
-	var __linkifyInkCapture: (options?: CaptureOptions) => Capture;
+	var __linkifyInkCapture: (options?: CaptureOptions) => Promise<Capture>;
 	/** Defined by background.js; for manual use from the worker's console. */
 	var __linkifySmokeTest: () => Promise<string>;
 }

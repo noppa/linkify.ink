@@ -100,7 +100,7 @@ function sizeBand(chars) {
  * @param {{
  *   url: string, chars: number, title: string, mode: string,
  *   droppedImages: number, linkedImages: number, inlinedImages: number,
- *   imagesRequested: boolean, imagePermission: boolean,
+ *   imagesRequested: boolean, imagePermission: boolean, width: number,
  * }} result
  */
 function showResult(result) {
@@ -114,7 +114,8 @@ function showResult(result) {
 	const notes = [];
 	if (result.mode === 'full') {
 		notes.push(
-			'Full page kept as-is, scripts included — the preview will not run them unless you turn them on.',
+			`Static snapshot of the page as rendered at ${result.width}px wide — no scripts, ` +
+				'and nothing that was hidden, hovered or behind a breakpoint.',
 		);
 	}
 	if (result.chars >= SIZE_LIMIT) {
