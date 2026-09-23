@@ -39,6 +39,10 @@
  *   init: (wasmUrl: string) => Promise<unknown>,
  *   compress: (data: Uint8Array, level: number) => Uint8Array,
  *   decompress: (data: Uint8Array) => Uint8Array,
+ *   createCCtx?: () => number,
+ *   createDCtx?: () => number,
+ *   compressUsingDict?: (cctx: number, data: Uint8Array, dict: Uint8Array, level: number) => Uint8Array,
+ *   decompressUsingDict?: (dctx: number, data: Uint8Array, dict: Uint8Array) => Uint8Array,
  * }} ZstdModule
  *
  * @typedef {{
@@ -51,11 +55,24 @@
  *   zstdWasmUrl: string,
  *   argon2: Argon2Module,
  *   argon2WasmUrl: string,
+ *   zstdDictionaryUrls?: Record<number, string>,
  *   origin?: string,
  * }} LinkifyInkDeps
+ *
+ * `zstdDictionaryUrls` maps a format version to the URL (usually a data: URL) of
+ * the zstd-compressed shared dictionary that version compresses with. Without the
+ * current version's dictionary, links are written in format 1, which needs none.
  */
 
-const FORMAT_VERSION = 1;
+// The flag byte's low six bits are the format version. It says how the payload
+// was compressed, so every version ever published has to stay readable:
+//   1  zstd
+//   2  zstd with a shared raw-content dictionary, dictionaries/v2.dict.zst. The
+//      dictionary primes the compressor with text most links contain anyway
+//      (markup, CSS, code, English), so no link has to spell it out itself.
+// A better dictionary is a new version, never an edit to a published one.
+const FORMAT_VERSION = 2;
+const FORMAT_PLAIN = 1;
 const BLOCK = 512;
 
 export class LinkifyInk {
@@ -74,10 +91,18 @@ export class LinkifyInk {
 	#argon2;
 	/** @type {string} */
 	#argon2WasmUrl;
+	/** @type {Record<number, string>} */
+	#zstdDictionaryUrls;
 	/** @type {string} */
 	#origin;
 	/** @type {Promise<void> | null} */
 	#initPromise = null;
+	/** Decompressed dictionaries by format version, loaded on first use. @type {Map<number, Promise<Uint8Array>>} */
+	#dictionaries = new Map();
+	/** @type {number | undefined} */
+	#cctx;
+	/** @type {number | undefined} */
+	#dctx;
 
 	/** @param {LinkifyInkDeps} deps */
 	constructor(deps) {
@@ -89,6 +114,7 @@ export class LinkifyInk {
 		this.#zstdWasmUrl = deps.zstdWasmUrl;
 		this.#argon2 = deps.argon2;
 		this.#argon2WasmUrl = deps.argon2WasmUrl;
+		this.#zstdDictionaryUrls = deps.zstdDictionaryUrls ?? {};
 		this.#origin = deps.origin ?? 'https://linkify.ink';
 	}
 
@@ -116,14 +142,14 @@ export class LinkifyInk {
 		} = options;
 		const metaBytes = new TextEncoder().encode(JSON.stringify(metadata));
 		const tarData = tarPack(files);
-		const compressed = this.#zstd.compress(tarData, 19);
+		const { version, compressed } = await this.#compress(tarData);
 
 		const payload = concat(uint16be(metaBytes.length), metaBytes, compressed);
 
 		let fullPayload;
 
 		if (encryption === 'none') {
-			const flagByte = (LinkifyInk.ENC_NONE << 6) | FORMAT_VERSION;
+			const flagByte = (LinkifyInk.ENC_NONE << 6) | version;
 			fullPayload = concat(new Uint8Array([flagByte]), payload);
 		} else if (encryption === 'password') {
 			if (!password)
@@ -132,7 +158,7 @@ export class LinkifyInk {
 			const iv = crypto.getRandomValues(new Uint8Array(12));
 			const key = await this.#argon2Derive(password, salt);
 			const ciphertext = await aesEncrypt(key, iv, payload);
-			const flagByte = (LinkifyInk.ENC_PASSWORD << 6) | FORMAT_VERSION;
+			const flagByte = (LinkifyInk.ENC_PASSWORD << 6) | version;
 			fullPayload = concat(new Uint8Array([flagByte]), salt, iv, ciphertext);
 		} else if (encryption === 'ecdh') {
 			if (!recipientPublicKey)
@@ -143,7 +169,7 @@ export class LinkifyInk {
 			const iv = crypto.getRandomValues(new Uint8Array(12));
 			const ciphertext = await aesEncrypt(sharedKey, iv, payload);
 			const ephemeralPub = await exportPublicKey(ephemeral.publicKey);
-			const flagByte = (LinkifyInk.ENC_ECDH << 6) | FORMAT_VERSION;
+			const flagByte = (LinkifyInk.ENC_ECDH << 6) | version;
 			fullPayload = concat(
 				new Uint8Array([flagByte]),
 				ephemeralPub,
@@ -170,6 +196,11 @@ export class LinkifyInk {
 		const fullPayload = LinkifyInk.base64UrlDecode(raw);
 
 		const encType = (fullPayload[0] >> 6) & 0x03;
+		const version = fullPayload[0] & 0x3f;
+		if (version < FORMAT_PLAIN || version > FORMAT_VERSION)
+			throw new Error(
+				`Unknown link format ${version}; it may have been made by a newer linkify.ink`,
+			);
 
 		let payload;
 
@@ -205,7 +236,7 @@ export class LinkifyInk {
 			metaLen === 0 ? {} : JSON.parse(new TextDecoder().decode(metaBytes))
 		);
 		const tarData = /** @type {Uint8Array<ArrayBuffer>} */ (
-			this.#zstd.decompress(compressedTar)
+			await this.#decompress(version, compressedTar)
 		);
 		const files = tarUnpack(tarData);
 
@@ -324,6 +355,59 @@ export class LinkifyInk {
 			).then(() => undefined);
 		}
 		return this.#initPromise;
+	}
+
+	/**
+	 * Compress with the current format's dictionary, or without one (format 1)
+	 * when the caller supplied no dictionary or a zstd without dictionary support.
+	 * @param {Uint8Array} data
+	 * @returns {Promise<{ version: number, compressed: Uint8Array }>}
+	 */
+	async #compress(data) {
+		const zstd = this.#zstd;
+		if (!this.#zstdDictionaryUrls[FORMAT_VERSION] || !zstd.compressUsingDict || !zstd.createCCtx)
+			return { version: FORMAT_PLAIN, compressed: zstd.compress(data, 19) };
+		const dictionary = await this.#dictionary(FORMAT_VERSION);
+		this.#cctx ??= zstd.createCCtx();
+		return {
+			version: FORMAT_VERSION,
+			compressed: zstd.compressUsingDict(this.#cctx, data, dictionary, 19),
+		};
+	}
+
+	/**
+	 * @param {number} version the link's format version
+	 * @param {Uint8Array} data
+	 * @returns {Promise<Uint8Array>}
+	 */
+	async #decompress(version, data) {
+		const zstd = this.#zstd;
+		if (version === FORMAT_PLAIN) return zstd.decompress(data);
+		if (!zstd.decompressUsingDict || !zstd.createDCtx)
+			throw new Error(`Link format ${version} needs a zstd with dictionary support`);
+		const dictionary = await this.#dictionary(version);
+		this.#dctx ??= zstd.createDCtx();
+		return zstd.decompressUsingDict(this.#dctx, data, dictionary);
+	}
+
+	/**
+	 * Fetch and decompress a format version's shared dictionary, once.
+	 * @param {number} version
+	 * @returns {Promise<Uint8Array>}
+	 */
+	#dictionary(version) {
+		let dictionary = this.#dictionaries.get(version);
+		if (!dictionary) {
+			const url = this.#zstdDictionaryUrls[version];
+			if (!url) throw new Error(`Link format ${version} needs its zstd dictionary`);
+			dictionary = fetch(url)
+				.then((response) => response.arrayBuffer())
+				.then((buffer) => this.#zstd.decompress(new Uint8Array(buffer)));
+			// A failed load (a flaky network) is retried by the next call.
+			dictionary.catch(() => this.#dictionaries.delete(version));
+			this.#dictionaries.set(version, dictionary);
+		}
+		return dictionary;
 	}
 
 	/**

@@ -11,8 +11,11 @@
 //
 //   - HTML tag names and CSS property names: TypeScript's lib.dom.d.ts
 //   - JS / TS keywords, literals and built-ins: highlight.js's language definitions
-//   - English word frequencies: counted over the Markdown docs in node_modules
-//     and the MDN prose in lib.dom.d.ts's JSDoc comments, i.e. technical English
+//   - English word and phrase frequencies: counted over the Markdown docs in
+//     node_modules and the MDN prose in lib.dom.d.ts's JSDoc comments, i.e.
+//     technical English
+//   - a zstd-trained section: fragments of the HTML, CSS, JS and Markdown that
+//     ship in node_modules, picked by zstd's own trainer (train-dictionary.py)
 //
 // plus hand-ordered "most common" lists for the high-value end.
 //
@@ -22,9 +25,11 @@
 // dictionary is therefore laid out least-valuable-first, which also means a
 // smaller dictionary is just the tail of a bigger one (see `truncateDictionary`).
 //
-//   node demo/shared-dictionary/build-dictionary.mjs    → out/dictionary.txt
+//   python3 demo/shared-dictionary/train-dictionary.py  → out/trained-1024k.raw
+//   node demo/shared-dictionary/build-dictionary.mjs    → out/dictionary.bin
+//   node demo/shared-dictionary/build-dictionary.mjs --write dictionaries/vN.dict.zst
 
-import { readFileSync, readdirSync, statSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync, mkdirSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -32,6 +37,9 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..');
 const require = createRequire(import.meta.url);
+
+/** Size of the trained section, in KB of zstd-trained raw content. */
+export const TRAINED_KB = 1024;
 
 // ── Sources ──────────────────────────────────────────────────────────────────
 
@@ -54,7 +62,7 @@ function allCssProperties() {
 }
 
 /** JavaScript + TypeScript keyword lists, from highlight.js. */
-function jsVocabulary() {
+export function jsVocabulary() {
 	const hljs = require('highlight.js/lib/core');
 	/** @param {string} name */
 	const keywords = (name) => require(`highlight.js/lib/languages/${name}`)(hljs).keywords;
@@ -68,12 +76,12 @@ function jsVocabulary() {
 }
 
 /**
- * English words ranked by how often they appear in technical prose: every
- * Markdown file in node_modules plus the MDN descriptions in lib.dom.d.ts.
- * Word counts are facts about that text, not the text itself, and the result is
- * the kind of English that gets shared as a link: docs, reports, reviews.
+ * The prose in every Markdown file in node_modules plus the MDN descriptions in
+ * lib.dom.d.ts, with code and URLs taken out: technical English, which is the
+ * kind that gets shared as a link (docs, reports, reviews). Only counts are taken
+ * from it, never the text itself.
  */
-function englishByFrequency() {
+function technicalProse() {
 	/** @type {string[]} */
 	const texts = [];
 	/** @param {string} dir */
@@ -88,19 +96,50 @@ function englishByFrequency() {
 	};
 	walk(join(root, 'node_modules'));
 	texts.push(...[...libDom.matchAll(/^\s*\* (.+)$/gm)].map((m) => m[1]));
-
-	/** @type {Map<string, number>} */
-	const counts = new Map();
-	for (const text of texts) {
-		const prose = text
+	return texts.map((text) =>
+		text
 			.replace(/```[\s\S]*?```/g, ' ') // fenced code
 			.replace(/`[^`]*`/g, ' ') // inline code
 			.replace(/\]\([^)]*\)/g, ']') // link targets
-			.replace(/https?:\/\/\S+/g, ' ');
+			.replace(/https?:\/\/\S+/g, ' '),
+	);
+}
+
+/** English words ranked by how often they appear in technical prose. */
+export function englishByFrequency() {
+	/** @type {Map<string, number>} */
+	const counts = new Map();
+	for (const prose of technicalProse())
 		for (const [word] of prose.matchAll(/\b[a-z]{2,}(?:'[a-z]+)?\b/g))
 			counts.set(word, (counts.get(word) ?? 0) + 1);
-	}
 	return [...counts].sort((a, b) => b[1] - a[1]).map(([word]) => word);
+}
+
+/**
+ * Two- and three-word phrases ("of the", "in order to", "is used,"), ranked by
+ * how many bytes they would save: count × length. A phrase is a longer match than
+ * any of its words, and English is mostly made of a few thousand of them. Phrases
+ * seen three times or fewer are noise and are left out.
+ */
+export function phrasesByFrequency() {
+	/** @type {Map<string, number>} */
+	const counts = new Map();
+	/** @param {string} phrase */
+	const count = (phrase) => counts.set(phrase, (counts.get(phrase) ?? 0) + 1);
+	for (const prose of technicalProse())
+		for (const sentence of prose.split(/[.!?;:()[\]\n]+/)) {
+			const w = sentence.toLowerCase().match(/[a-z]+(?:'[a-z]+)?|,/g) ?? [];
+			for (let i = 0; i + 1 < w.length; i++) {
+				if (w[i] === ',') continue;
+				const two = w[i] + (w[i + 1] === ',' ? ',' : ' ' + w[i + 1]);
+				count(two);
+				if (i + 2 < w.length && w[i + 1] !== ',' && w[i + 2] !== ',') count(two + ' ' + w[i + 2]);
+			}
+		}
+	return [...counts]
+		.filter(([, n]) => n > 3)
+		.sort((a, b) => b[1] * b[0].length - a[1] * a[0].length)
+		.map(([phrase]) => phrase);
 }
 
 // ── Hand-ordered high-value lists ────────────────────────────────────────────
@@ -223,10 +262,15 @@ const renderCapitalized = (words) =>
  * Sections, least valuable first. Each has a `category` so the measurement can
  * drop one at a time and see what it was worth.
  *
- * @param {{ englishWords?: number }} [options] how deep into the frequency list to go
- * @returns {{ category: string, text: string }[]}
+ * `trained` is optional raw content from a zstd-trained dictionary (see
+ * train-dictionary.py): real fragments of general web text, which cover what no
+ * word list does (code idioms, Markdown structure, whole sentences). It is by far
+ * the biggest section and goes first, i.e. furthest from the input.
+ *
+ * @param {{ englishWords?: number, trained?: Buffer }} [options]
+ * @returns {{ category: string, text: string | Buffer }[]}
  */
-export function buildSections({ englishWords = 6000 } = {}) {
+export function buildSections({ englishWords = 6000, trained } = {}) {
 	const english = englishByFrequency();
 	const commonTags = new Set(COMMON_TAGS);
 	const commonProps = new Set(COMMON_DECLARATIONS.map((d) => d.split(':')[0]));
@@ -234,7 +278,10 @@ export function buildSections({ englishWords = 6000 } = {}) {
 	const commonJs = new Set(COMMON_JS.map((p) => p.trim()));
 
 	return [
+		...(trained ? [{ category: 'trained', text: trained }] : []),
+
 		// The long tail: everything exhaustive, cheapest-to-lose first.
+		{ category: 'phrases', text: renderWords(phrasesByFrequency().reverse()) },
 		{ category: 'english', text: renderWords(english.slice(3000, englishWords)) },
 		{ category: 'css', text: renderCssProperties(allCssProperties().filter((p) => !commonProps.has(p))) },
 		{ category: 'html', text: renderTags(allTagNames().filter((t) => !commonTags.has(t))) },
@@ -253,8 +300,9 @@ export function buildSections({ englishWords = 6000 } = {}) {
 	];
 }
 
-/** @param {{ text: string }[]} sections */
-export const joinSections = (sections) => Buffer.from(sections.map((s) => s.text).join('\n'), 'utf8');
+/** @param {{ text: string | Buffer }[]} sections */
+export const joinSections = (sections) =>
+	Buffer.concat(sections.flatMap((s, i) => [...(i ? [Buffer.from('\n')] : []), Buffer.from(s.text)]));
 
 /**
  * A smaller dictionary is the tail of the full one, because the tail is where the
@@ -268,13 +316,37 @@ export function truncateDictionary(dictionary, size) {
 	return dictionary.subarray(start === -1 ? dictionary.length - size : start);
 }
 
+/** The trained content train-dictionary.py left in out/, if it has been run. */
+export function readTrained(kb = TRAINED_KB) {
+	const path = join(here, 'out', `trained-${kb}k.raw`);
+	return existsSync(path) ? readFileSync(path) : undefined;
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
-	const sections = buildSections();
+	const trained = readTrained();
+	if (!trained) console.warn(`out/trained-${TRAINED_KB}k.raw not found: run train-dictionary.py first, or this is the vocabulary only`);
+	const sections = buildSections({ trained });
 	const dictionary = joinSections(sections);
 	mkdirSync(join(here, 'out'), { recursive: true });
-	writeFileSync(join(here, 'out', 'dictionary.txt'), dictionary);
+	writeFileSync(join(here, 'out', 'dictionary.bin'), dictionary);
 	/** @type {Record<string, number>} */
 	const byCategory = {};
 	for (const s of sections) byCategory[s.category] = (byCategory[s.category] ?? 0) + s.text.length;
-	console.log(`out/dictionary.txt: ${dictionary.length} bytes`, byCategory);
+	console.log(`out/dictionary.bin: ${dictionary.length} bytes`, byCategory);
+
+	// --write <path> freezes this build as a new dictionary version. Published
+	// dictionaries are part of the link format and are never overwritten.
+	const at = process.argv.indexOf('--write');
+	if (at !== -1) {
+		const target = join(process.cwd(), process.argv[at + 1] ?? '');
+		if (existsSync(target)) throw new Error(`${target} exists; a published dictionary is never replaced`);
+		// zstd would read the frame magic as a formatted dictionary, not raw content
+		if (dictionary.readUInt32LE(0) === 0xec30a437) throw new Error('dictionary starts with the zstd dictionary magic');
+		const { linkifyInkCodecDependencies } = await import('../../vendor.codec.bundle.js');
+		const { zstd, zstdWasmUrl } = linkifyInkCodecDependencies;
+		await zstd.init(zstdWasmUrl);
+		const compressed = zstd.compress(dictionary, 22);
+		writeFileSync(target, compressed);
+		console.log(`${target}: ${compressed.length} bytes`);
+	}
 }

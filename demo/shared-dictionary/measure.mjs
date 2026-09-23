@@ -1,29 +1,30 @@
-// measure.mjs — how much shorter does a shared zstd dictionary make a link?
+// measure.mjs — how much shorter does the shared zstd dictionary make a link?
 //
 // Every number here is a real link: the document goes through LinkifyInk's own
-// createLink, and back through readLink to prove it round-trips. The lib takes
-// its zstd module as a dependency, so a dictionary is tried by handing it a zstd
-// whose compress/decompress are the vendored *UsingDict variants. The lib itself
-// is untouched.
+// createLink, and back through readLink to prove it round-trips. Each variant is
+// handed to the lib the way the app hands it the published one, as the format-2
+// entry of `zstdDictionaryUrls`.
 //
-//   node demo/shared-dictionary/build-dictionary.mjs
-//   python3 demo/shared-dictionary/train-dictionary.py      (optional, slow)
+//   node demo/shared-dictionary/fetch-corpus.mjs            (once; held-out docs)
 //   node demo/shared-dictionary/measure.mjs [extra.html ...] → out/report.md
 //
-// Documents passed on the command line are measured alongside the held-out repo
-// files, and also as prefixes (the first 4/16/64 KB) to show how the saving
-// depends on document size.
+// Variants other than the published dictionary need the build inputs
+// (train-dictionary.py's out/trained-*.raw); the ones that are missing are skipped.
+// Documents passed on the command line are measured alongside the corpus, and also
+// as prefixes (the first 4/16/64 KB) to show how the saving depends on size.
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { marked } from 'marked';
 import { linkifyInkCodecDependencies } from '../../vendor.codec.bundle.js';
 import { LinkifyInk } from '../../linkify.ink.js';
-import { buildSections, joinSections, truncateDictionary } from './build-dictionary.mjs';
+import { buildSections, joinSections, readTrained, truncateDictionary } from './build-dictionary.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..');
-const { zstd } = linkifyInkCodecDependencies;
+const { zstd, zstdWasmUrl } = linkifyInkCodecDependencies;
+await zstd.init(zstdWasmUrl);
 
 // ── Corpus ───────────────────────────────────────────────────────────────────
 
@@ -39,77 +40,84 @@ for (const path of process.argv.slice(2)) {
 		if (bytes.length > kb * 1024 * 2) add(`${name} (first ${kb} KB)`, bytes.subarray(0, kb * 1024));
 	add(name, bytes);
 }
-// Held out: the repo's own files. Nothing in either dictionary comes from them.
+for (const dir of [join(here, 'corpus'), join(here, 'out', 'corpus')])
+	if (existsSync(dir))
+		for (const name of readdirSync(dir).sort()) add(name, new Uint8Array(readFileSync(join(dir, name))));
+// What the extension's article mode produces: rendered prose in a bare shell.
+for (const name of ['react-19.md', 'rustbook-ch04.md']) {
+	const path = join(here, 'out', 'corpus', name);
+	if (!existsSync(path)) continue;
+	const body = marked.parse(readFileSync(path, 'utf8'), { async: false });
+	const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${name}</title></head><body><article>${body}</article></body></html>`;
+	add(`${name} as article.html`, new TextEncoder().encode(html));
+}
+// This repo's own files. Nothing in the dictionary comes from them either.
 for (const path of ['index.html', 'sandbox-loader.html', 'styles.css', 'app.js',
 	'components/EditorPage.js', 'README.md', 'linkify-ink-plan.md'])
 	add(path, new Uint8Array(readFileSync(join(root, path))));
 
 // ── Dictionaries ─────────────────────────────────────────────────────────────
 
-const sections = buildSections();
-const vocabulary = joinSections(sections);
+const published = zstd.decompress(new Uint8Array(readFileSync(join(root, 'dictionaries', 'v2.dict.zst'))));
+const v2 = Buffer.from(published.buffer, published.byteOffset, published.byteLength);
 
 /** @type {{ name: string, dictionary?: Uint8Array }[]} */
 const variants = [{ name: 'no dictionary' }];
-for (const kb of [4, 16, 32])
-	variants.push({ name: `vocab ${kb} KB`, dictionary: truncateDictionary(vocabulary, kb * 1024) });
-variants.push({ name: `vocab ${Math.round(vocabulary.length / 1024)} KB`, dictionary: vocabulary });
-for (const category of new Set(sections.map((s) => s.category)))
-	variants.push({
-		name: `vocab − ${category}`,
-		dictionary: joinSections(sections.filter((s) => s.category !== category)),
-	});
-for (const kb of [16, 64]) {
-	const path = join(here, 'out', `trained-${kb}k.dict`);
-	if (!existsSync(path)) continue;
-	const trained = new Uint8Array(readFileSync(path));
-	variants.push({ name: `trained ${kb} KB`, dictionary: trained });
+for (const kb of [64, 256])
+	variants.push({ name: `v2's last ${kb} KB`, dictionary: truncateDictionary(v2, kb * 1024) });
+variants.push({ name: 'v2', dictionary: v2 });
+
+const trained = readTrained();
+if (trained) {
+	const sections = buildSections({ trained });
+	for (const category of ['trained', 'phrases', 'english', 'css'])
+		variants.push({
+			name: `v2 − ${category}`,
+			dictionary: joinSections(sections.filter((s) => s.category !== category)),
+		});
 }
+const bigger = readTrained(2048);
+if (bigger) variants.push({ name: 'v2 with 2 MB trained', dictionary: joinSections(buildSections({ trained: bigger })) });
 
 // ── Measuring ────────────────────────────────────────────────────────────────
 
-/** A LinkifyInk whose zstd uses `dictionary` in both directions. @param {Uint8Array} [dictionary] */
+/** A LinkifyInk whose format-2 dictionary is `dictionary`. @param {Uint8Array} [dictionary] */
 function linkifyWith(dictionary) {
-	if (!dictionary) return new LinkifyInk(linkifyInkCodecDependencies);
-	const cctx = zstd.createCCtx();
-	const dctx = zstd.createDCtx();
-	return new LinkifyInk({
-		...linkifyInkCodecDependencies,
-		zstd: {
-			...zstd,
-			/** @param {Uint8Array} data @param {number} level */
-			compress: (data, level) => zstd.compressUsingDict(cctx, data, dictionary, level),
-			/** @param {Uint8Array} data */
-			decompress: (data) => zstd.decompressUsingDict(dctx, data, dictionary),
-		},
-	});
+	const url = dictionary && `data:application/octet-stream;base64,${Buffer.from(zstd.compress(dictionary, 19)).toString('base64')}`;
+	return new LinkifyInk({ ...linkifyInkCodecDependencies, zstdDictionaryUrls: url ? { 2: url } : {} });
 }
 
 /** @param {Uint8Array} a @param {Uint8Array} b */
 const same = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 
-await linkifyWith().createLink([]); // loads the wasm, which createCCtx needs
-/** @type {Map<string, number[]>} variant name → link length per document */
+/** @type {Map<string, { lengths: number[], ms: number }>} */
 const results = new Map();
 for (const variant of variants) {
 	const linkify = linkifyWith(variant.dictionary);
+	await linkify.createLink([]); // loads the dictionary, so it isn't timed
 	const lengths = [];
+	let ms = 0;
 	for (const doc of documents) {
-		const name = doc.name.endsWith('.html') || doc.name.includes('.html ') ? 'index.html' : doc.name;
+		const name = doc.name.includes('.html') ? 'index.html' : doc.name;
+		const start = performance.now();
 		const url = await linkify.createLink([{ name, data: doc.bytes }]);
+		ms += performance.now() - start;
 		const { files } = await linkify.readLink(url);
 		if (!same(files[0].data, doc.bytes)) throw new Error(`${variant.name} failed to round-trip ${doc.name}`);
 		lengths.push(url.length);
 	}
-	results.set(variant.name, lengths);
+	results.set(variant.name, { lengths, ms: ms / documents.length });
+	console.error(`${variant.name}: done`);
 }
 
 // ── Report ───────────────────────────────────────────────────────────────────
 
-const baseline = /** @type {number[]} */ (results.get('no dictionary'));
+const baseline = /** @type {{ lengths: number[] }} */ (results.get('no dictionary')).lengths;
 /** @param {number} n @param {number} base */
 const pct = (n, base) => `${n < base ? '−' : '+'}${(Math.abs(1 - n / base) * 100).toFixed(1)}%`;
 const fmt = (/** @type {number} */ n) => n.toLocaleString('en-US');
+const total = (/** @type {number[]} */ xs) => xs.reduce((a, b) => a + b, 0);
+const lengthsOf = (/** @type {string} */ name) => /** @type {{ lengths: number[] }} */ (results.get(name)).lengths;
 
 const lines = [
 	'# Shared-dictionary link lengths',
@@ -122,18 +130,26 @@ const lines = [
 ];
 documents.forEach((doc, i) => {
 	const cells = variants.map((v) => {
-		const n = /** @type {number[]} */ (results.get(v.name))[i];
+		const n = lengthsOf(v.name)[i];
 		return v.dictionary ? `${fmt(n)} (${pct(n, baseline[i])})` : fmt(n);
 	});
 	lines.push(`| ${doc.name} | ${fmt(doc.bytes.length)} | ${cells.join(' | ')} |`);
 });
-const total = (/** @type {number[]} */ xs) => xs.reduce((a, b) => a + b, 0);
 lines.push(
 	`| **total** | ${fmt(total(documents.map((d) => d.bytes.length)))} | ` +
 		variants.map((v) => {
-			const n = total(/** @type {number[]} */ (results.get(v.name)));
+			const n = total(lengthsOf(v.name));
 			return v.dictionary ? `${fmt(n)} (${pct(n, total(baseline))})` : fmt(n);
 		}).join(' | ') + ' |',
+	// Every document counts the same here, so a short note weighs as much as an RFC.
+	`| **mean per document** | | ` +
+		variants.map((v) => {
+			if (!v.dictionary) return '';
+			const saving = lengthsOf(v.name).reduce((s, n, i) => s + (1 - n / baseline[i]), 0) / documents.length;
+			return `−${(saving * 100).toFixed(1)}%`;
+		}).join(' | ') + ' |',
+	`| dictionary size | | ${variants.map((v) => (v.dictionary ? `${fmt(Math.round(v.dictionary.length / 1024))} KB` : '')).join(' | ')} |`,
+	`| createLink, ms per document | | ${variants.map((v) => /** @type {{ ms: number }} */ (results.get(v.name)).ms.toFixed(0)).join(' | ')} |`,
 );
 
 const report = lines.join('\n') + '\n';
