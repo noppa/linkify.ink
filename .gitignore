@@ -146,3 +146,5 @@ extension/vendor/
 demo/scrape-compress/fixtures/vendor/
 demo/scrape-compress/out/
 demo/scrape-compress/.npm-staging/
+# Shared-dictionary experiment: generated dictionaries and measurement output.
+demo/shared-dictionary/out/
