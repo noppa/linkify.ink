@@ -16,6 +16,8 @@
 //     technical English
 //   - a zstd-trained section: fragments of the HTML, CSS, JS and Markdown that
 //     ship in node_modules, picked by zstd's own trainer (train-dictionary.py)
+//   - the most frequent words of 42 languages, from wordfreq
+//     (export-wordfreq.py), so links in any of them get shorter too
 //
 // plus hand-ordered "most common" lists for the high-value end.
 //
@@ -26,6 +28,7 @@
 // smaller dictionary is just the tail of a bigger one (see `truncateDictionary`).
 //
 //   python3 demo/shared-dictionary/train-dictionary.py  → out/trained-1024k.raw
+//   python3 demo/shared-dictionary/export-wordfreq.py   → out/wordfreq-5000.json
 //   node demo/shared-dictionary/build-dictionary.mjs    → out/dictionary.bin
 //   node demo/shared-dictionary/build-dictionary.mjs --write dictionaries/vN.dict.zst
 
@@ -40,6 +43,8 @@ const require = createRequire(import.meta.url);
 
 /** Size of the trained section, in KB of zstd-trained raw content. */
 export const TRAINED_KB = 1024;
+/** Words per language in the wordfreq section. */
+export const WORDFREQ_WORDS = 5000;
 
 // ── Sources ──────────────────────────────────────────────────────────────────
 
@@ -262,15 +267,21 @@ const renderCapitalized = (words) =>
  * Sections, least valuable first. Each has a `category` so the measurement can
  * drop one at a time and see what it was worth.
  *
+ * `wordfreq` is optional: the most frequent words of each of wordfreq's
+ * languages (see export-wordfreq.py), one line of words per language. It is
+ * the least valuable part for any single link, since most of it is languages the
+ * link isn't in, so it goes first of all. That placement costs English links
+ * nothing, and moving it closer gained other languages only half a point.
+ *
  * `trained` is optional raw content from a zstd-trained dictionary (see
  * train-dictionary.py): real fragments of general web text, which cover what no
  * word list does (code idioms, Markdown structure, whole sentences). It is by far
  * the biggest section and goes first, i.e. furthest from the input.
  *
- * @param {{ englishWords?: number, trained?: Buffer }} [options]
+ * @param {{ englishWords?: number, trained?: Buffer, wordfreq?: Record<string, string[]> }} [options]
  * @returns {{ category: string, text: string | Buffer }[]}
  */
-export function buildSections({ englishWords = 6000, trained } = {}) {
+export function buildSections({ englishWords = 6000, trained, wordfreq } = {}) {
 	const english = englishByFrequency();
 	const commonTags = new Set(COMMON_TAGS);
 	const commonProps = new Set(COMMON_DECLARATIONS.map((d) => d.split(':')[0]));
@@ -278,6 +289,9 @@ export function buildSections({ englishWords = 6000, trained } = {}) {
 	const commonJs = new Set(COMMON_JS.map((p) => p.trim()));
 
 	return [
+		...(wordfreq
+			? [{ category: 'wordfreq', text: Object.values(wordfreq).map(renderWords).join('\n') }]
+			: []),
 		...(trained ? [{ category: 'trained', text: trained }] : []),
 
 		// The long tail: everything exhaustive, cheapest-to-lose first.
@@ -316,6 +330,15 @@ export function truncateDictionary(dictionary, size) {
 	return dictionary.subarray(start === -1 ? dictionary.length - size : start);
 }
 
+/**
+ * The word lists export-wordfreq.py left in out/, if it has been run.
+ * @returns {Record<string, string[]> | undefined} language → words, most frequent first
+ */
+export function readWordfreq(n = WORDFREQ_WORDS) {
+	const path = join(here, 'out', `wordfreq-${n}.json`);
+	return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')).words : undefined;
+}
+
 /** The trained content train-dictionary.py left in out/, if it has been run. */
 export function readTrained(kb = TRAINED_KB) {
 	const path = join(here, 'out', `trained-${kb}k.raw`);
@@ -325,13 +348,15 @@ export function readTrained(kb = TRAINED_KB) {
 if (import.meta.url === `file://${process.argv[1]}`) {
 	const trained = readTrained();
 	if (!trained) console.warn(`out/trained-${TRAINED_KB}k.raw not found: run train-dictionary.py first, or this is the vocabulary only`);
-	const sections = buildSections({ trained });
+	const wordfreq = readWordfreq();
+	if (!wordfreq) console.warn(`out/wordfreq-${WORDFREQ_WORDS}.json not found: run export-wordfreq.py first, or this has no other languages`);
+	const sections = buildSections({ trained, wordfreq });
 	const dictionary = joinSections(sections);
 	mkdirSync(join(here, 'out'), { recursive: true });
 	writeFileSync(join(here, 'out', 'dictionary.bin'), dictionary);
 	/** @type {Record<string, number>} */
 	const byCategory = {};
-	for (const s of sections) byCategory[s.category] = (byCategory[s.category] ?? 0) + s.text.length;
+	for (const s of sections) byCategory[s.category] = (byCategory[s.category] ?? 0) + Buffer.byteLength(s.text);
 	console.log(`out/dictionary.bin: ${dictionary.length} bytes`, byCategory);
 
 	// --write <path> freezes this build as a new dictionary version. Published

@@ -1,8 +1,9 @@
 // fetch-corpus.mjs — download the held-out documents measure.mjs reports on.
 //
 // The kind of thing people share as a link: READMEs and docs, source files in
-// several languages, config, a long essay, and single-file HTML pages. None of it
-// is in node_modules, so none of it can be in the dictionary. Downloaded rather
+// several languages, config, a long essay, and single-file HTML pages, in English
+// and in nine other languages. None of it is in node_modules, so none of it can
+// be in the dictionary. Downloaded rather
 // than committed because it is other people's work.
 //
 //   node demo/shared-dictionary/fetch-corpus.mjs   → out/corpus/
@@ -43,10 +44,32 @@ export const CORPUS = {
 	'pride-and-prejudice.txt': gh + 'GITenberg/Pride-and-Prejudice_1342/master/1342.txt',
 };
 
+/**
+ * Documents in other languages, named by language so measure.mjs can report on
+ * them separately: mdn/translated-content/main/files/'s translations (a short glossary entry, a guide and a
+ * code-heavy tutorial), the German Rust book and the Finnish Full Stack Open.
+ * @type {Record<string, string>}
+ */
+export const OTHER_LANGUAGES = {
+	...Object.fromEntries(
+		['es', 'fr', 'ja', 'ko', 'pt-br', 'ru', 'zh-cn'].flatMap((lang) => [
+			[`${lang}.mdn-glossary-api.md`, gh + `mdn/translated-content/main/files/${lang}/glossary/api/index.md`],
+			[`${lang}.mdn-http-overview.md`, gh + `mdn/translated-content/main/files/${lang}/web/http/guides/overview/index.md`],
+			[`${lang}.mdn-flexbox.md`, gh + `mdn/translated-content/main/files/${lang}/learn_web_development/core/css_layout/flexbox/index.md`],
+		]),
+	),
+	'de.rustbook-ch01.md': gh + 'rust-lang-de/rustbook-de/master/src/ch01-00-getting-started.md',
+	'de.rustbook-ch04.md': gh + 'rust-lang-de/rustbook-de/master/src/ch04-01-what-is-ownership.md',
+	'fi.fullstackopen-osa0.md': gh + 'fullstack-hy2020/fullstack-hy2020.github.io/source/src/content/0/fi/osa0.md',
+	'fi.fullstackopen-osa0a.md': gh + 'fullstack-hy2020/fullstack-hy2020.github.io/source/src/content/0/fi/osa0a.md',
+	'fi.fullstackopen-osa1.md': gh + 'fullstack-hy2020/fullstack-hy2020.github.io/source/src/content/1/fi/osa1.md',
+	'fi.fullstackopen-osa1a.md': gh + 'fullstack-hy2020/fullstack-hy2020.github.io/source/src/content/1/fi/osa1a.md',
+};
+
 if (import.meta.url === `file://${process.argv[1]}`) {
 	const dir = join(here, 'out', 'corpus');
 	mkdirSync(dir, { recursive: true });
-	for (const [name, url] of Object.entries(CORPUS)) {
+	for (const [name, url] of Object.entries({ ...CORPUS, ...OTHER_LANGUAGES })) {
 		const response = await fetch(url);
 		if (!response.ok) {
 			console.warn(`${name}: ${response.status}, skipped`);

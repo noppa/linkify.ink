@@ -124,6 +124,6 @@ test.describe('shared dictionary', () => {
 			const hash = await crypto.subtle.digest('SHA-256', dictionary);
 			return [...new Uint8Array(hash)].map((b) => b.toString(16).padStart(2, '0')).join('');
 		});
-		expect(digest).toBe('5fed23da0bac45cbbef2d2a1d4f13a3dcaa302cce356801ea573eee01d60cee1');
+		expect(digest).toBe('1d7a9c7e75e27781aebc19b15c8460371b325fd4c18bc5bdeaa205b8b9517416');
 	});
 });
