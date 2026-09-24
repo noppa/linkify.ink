@@ -16,8 +16,9 @@
 //     technical English
 //   - a zstd-trained section: fragments of the HTML, CSS, JS and Markdown that
 //     ship in node_modules, picked by zstd's own trainer (train-dictionary.py)
-//   - the most frequent words of 42 languages, from wordfreq
-//     (export-wordfreq.py), so links in any of them get shorter too
+//   - the most frequent words of 41 languages, counted over Common Voice's
+//     sentences and VS Code's and Firefox's translations (count-words.mjs), so
+//     links in any of them get shorter too
 //
 // plus hand-ordered "most common" lists for the high-value end.
 //
@@ -28,7 +29,7 @@
 // smaller dictionary is just the tail of a bigger one (see `truncateDictionary`).
 //
 //   python3 demo/shared-dictionary/train-dictionary.py  → out/trained-1024k.raw
-//   python3 demo/shared-dictionary/export-wordfreq.py   → out/wordfreq-5000.json
+//   node demo/shared-dictionary/count-words.mjs         → out/words-5000.json
 //   node demo/shared-dictionary/build-dictionary.mjs    → out/dictionary.bin
 //   node demo/shared-dictionary/build-dictionary.mjs --write dictionaries/vN.dict.zst
 
@@ -43,8 +44,8 @@ const require = createRequire(import.meta.url);
 
 /** Size of the trained section, in KB of zstd-trained raw content. */
 export const TRAINED_KB = 1024;
-/** Words per language in the wordfreq section. */
-export const WORDFREQ_WORDS = 5000;
+/** Words per language in the languages section. */
+export const LANGUAGE_WORDS = 5000;
 
 // ── Sources ──────────────────────────────────────────────────────────────────
 
@@ -267,21 +268,21 @@ const renderCapitalized = (words) =>
  * Sections, least valuable first. Each has a `category` so the measurement can
  * drop one at a time and see what it was worth.
  *
- * `wordfreq` is optional: the most frequent words of each of wordfreq's
- * languages (see export-wordfreq.py), one line of words per language. It is
- * the least valuable part for any single link, since most of it is languages the
- * link isn't in, so it goes first of all. That placement costs English links
- * nothing, and moving it closer gained other languages only half a point.
+ * `languages` is optional: the most frequent words of each language (see
+ * count-words.mjs), one line of words per language. It is the least valuable
+ * part for any single link, since most of it is languages the link isn't in, so
+ * it goes first of all. That placement costs English links nothing, and moving
+ * it closer gained other languages only half a point.
  *
  * `trained` is optional raw content from a zstd-trained dictionary (see
  * train-dictionary.py): real fragments of general web text, which cover what no
- * word list does (code idioms, Markdown structure, whole sentences). It is by far
- * the biggest section and goes first, i.e. furthest from the input.
+ * word list does (code idioms, Markdown structure, whole sentences). It is the
+ * biggest section after the languages, and goes right after them.
  *
- * @param {{ englishWords?: number, trained?: Buffer, wordfreq?: Record<string, string[]> }} [options]
+ * @param {{ englishWords?: number, trained?: Buffer, languages?: Record<string, string[]> }} [options]
  * @returns {{ category: string, text: string | Buffer }[]}
  */
-export function buildSections({ englishWords = 6000, trained, wordfreq } = {}) {
+export function buildSections({ englishWords = 6000, trained, languages } = {}) {
 	const english = englishByFrequency();
 	const commonTags = new Set(COMMON_TAGS);
 	const commonProps = new Set(COMMON_DECLARATIONS.map((d) => d.split(':')[0]));
@@ -289,8 +290,8 @@ export function buildSections({ englishWords = 6000, trained, wordfreq } = {}) {
 	const commonJs = new Set(COMMON_JS.map((p) => p.trim()));
 
 	return [
-		...(wordfreq
-			? [{ category: 'wordfreq', text: Object.values(wordfreq).map(renderWords).join('\n') }]
+		...(languages
+			? [{ category: 'languages', text: Object.values(languages).map(renderWords).join('\n') }]
 			: []),
 		...(trained ? [{ category: 'trained', text: trained }] : []),
 
@@ -331,12 +332,12 @@ export function truncateDictionary(dictionary, size) {
 }
 
 /**
- * The word lists export-wordfreq.py left in out/, if it has been run.
+ * The word lists count-words.mjs left in out/, if it has been run.
  * @returns {Record<string, string[]> | undefined} language → words, most frequent first
  */
-export function readWordfreq(n = WORDFREQ_WORDS) {
-	const path = join(here, 'out', `wordfreq-${n}.json`);
-	return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')).words : undefined;
+export function readLanguages(n = LANGUAGE_WORDS) {
+	const path = join(here, 'out', `words-${n}.json`);
+	return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : undefined;
 }
 
 /** The trained content train-dictionary.py left in out/, if it has been run. */
@@ -348,9 +349,9 @@ export function readTrained(kb = TRAINED_KB) {
 if (import.meta.url === `file://${process.argv[1]}`) {
 	const trained = readTrained();
 	if (!trained) console.warn(`out/trained-${TRAINED_KB}k.raw not found: run train-dictionary.py first, or this is the vocabulary only`);
-	const wordfreq = readWordfreq();
-	if (!wordfreq) console.warn(`out/wordfreq-${WORDFREQ_WORDS}.json not found: run export-wordfreq.py first, or this has no other languages`);
-	const sections = buildSections({ trained, wordfreq });
+	const languages = readLanguages();
+	if (!languages) console.warn(`out/words-${LANGUAGE_WORDS}.json not found: run count-words.mjs first, or this has no other languages`);
+	const sections = buildSections({ trained, languages });
 	const dictionary = joinSections(sections);
 	mkdirSync(join(here, 'out'), { recursive: true });
 	writeFileSync(join(here, 'out', 'dictionary.bin'), dictionary);

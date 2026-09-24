@@ -8,23 +8,21 @@ which dictionary a link needs.
 | format | dictionary | raw size | SHA-256 of the raw dictionary |
 | --- | --- | ---: | --- |
 | 1 | none | | |
-| 2 | `v2.dict.zst` | 3,411,973 bytes | `1d7a9c7e75e27781aebc19b15c8460371b325fd4c18bc5bdeaa205b8b9517416` |
+| 2 | `v2.dict.zst` | 3,489,101 bytes | `84b92dfee4d5a8b1a41878e9a3c5dc470424d729c78ac47a1778c1e04a2cba80` |
 
 The files here are the dictionaries compressed with zstd, which the app already
 has to decompress them. `vendor.codec.js` imports each one as a data URL
 (`--loader:.zst=dataurl`), so the codec bundle carries it and works offline, in
 the extension and in Node without fetching anything.
 
-## Licence
+## Sources
 
-`v2.dict.zst` contains word lists from
-[wordfreq](https://github.com/rspeer/wordfreq) by Robyn Speer, whose data is
-licensed [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/), and is
-distributed under the same licence (the rest of the repository is MIT). wordfreq
-builds its lists from Wikipedia, OpenSubtitles, SUBTLEX, Google Books Ngrams,
-NewsCrawl, GlobalVoices, Reddit and Twitter; see its README for the full credits.
-The dictionary also holds fragments of the MIT, ISC, BSD and Apache-licensed
-packages in `node_modules`, chosen by zstd's dictionary trainer.
+`v2.dict.zst` holds no text under a share-alike licence. Its word lists are
+counts over Mozilla Common Voice's sentences (CC0), VS Code's language packs
+(MIT) and Firefox's localizations (MPL-2.0); only which words are most frequent
+comes from them. Its trained section holds fragments of the MIT, ISC, BSD and
+Apache-licensed packages in `node_modules`, chosen by zstd's dictionary trainer.
+See [`demo/shared-dictionary/`](../demo/shared-dictionary/README.md).
 
 ## Never edit or delete one
 

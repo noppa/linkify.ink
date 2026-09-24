@@ -9,7 +9,7 @@
 //   node demo/shared-dictionary/measure.mjs [extra.html ...] → out/report.md
 //
 // Variants other than the published dictionary need the build inputs
-// (out/trained-*.raw, out/wordfreq-*.json); the ones that are missing are skipped.
+// (out/trained-*.raw, out/words-*.json); the ones that are missing are skipped.
 // Documents fetch-corpus.mjs names by language (`fi.…`) are reported separately.
 // Documents passed on the command line are measured alongside the corpus, and also
 // as prefixes (the first 4/16/64 KB) to show how the saving depends on size.
@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 import { marked } from 'marked';
 import { linkifyInkCodecDependencies } from '../../vendor.codec.bundle.js';
 import { LinkifyInk } from '../../linkify.ink.js';
-import { buildSections, joinSections, readTrained, readWordfreq, truncateDictionary } from './build-dictionary.mjs';
+import { buildSections, joinSections, readLanguages, readTrained, truncateDictionary } from './build-dictionary.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..');
@@ -69,16 +69,16 @@ for (const kb of [64, 256])
 variants.push({ name: 'v2', dictionary: v2 });
 
 const trained = readTrained();
-const wordfreq = readWordfreq();
-if (trained && wordfreq) {
-	const sections = buildSections({ trained, wordfreq });
-	for (const category of ['wordfreq', 'trained', 'phrases', 'english'])
+const languages = readLanguages();
+if (trained && languages) {
+	const sections = buildSections({ trained, languages });
+	for (const category of ['languages', 'trained', 'phrases', 'english'])
 		variants.push({
 			name: `v2 − ${category}`,
 			dictionary: joinSections(sections.filter((s) => s.category !== category)),
 		});
-	const more = readWordfreq(15000);
-	if (more) variants.push({ name: 'v2 with 15k words per language', dictionary: joinSections(buildSections({ trained, wordfreq: more })) });
+	const more = readLanguages(10000);
+	if (more) variants.push({ name: 'v2 with 10k words per language', dictionary: joinSections(buildSections({ trained, languages: more })) });
 }
 
 // ── Measuring ────────────────────────────────────────────────────────────────
