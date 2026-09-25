@@ -268,6 +268,12 @@ test.describe('editor page', () => {
 		await expect(page.getByRole('button', { name: 'Share' })).toHaveCount(0);
 		await expect(page.getByRole('button', { name: 'Download' })).toBeVisible();
 
+		await page.getByRole('button', { name: 'Toggle file list' }).click();
+		await expect(page.locator('.sidebar')).toBeVisible();
+		await expect(page.locator('.file-item', { hasText: 'README.md' })).toBeVisible();
+		await expect(page.locator('.add-file')).toHaveCount(0);
+		await expect(page.locator('.file-item-action')).toHaveCount(0);
+
 		await page.getByRole('button', { name: 'Open in editor' }).click();
 		await expect(page.locator('.app')).not.toHaveClass(/shared-link-preview/);
 		await expect(page.getByRole('button', { name: 'Share' })).toBeVisible();

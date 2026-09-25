@@ -508,9 +508,25 @@ html, body {
 	padding: 2px 8px;
 }
 
+.reader-bar .btn-icon {
+	flex-shrink: 0;
+	padding: 2px 4px;
+}
+
 .app.shared-link-preview .main {
 	grid-template-columns: minmax(0, 1fr);
 	grid-template-rows: minmax(0, 1fr);
+}
+
+.app.shared-link-preview.reader-files-open .main {
+	grid-template-columns: 200px minmax(0, 1fr);
+}
+
+@media (max-width: 640px) {
+	.app.shared-link-preview.reader-files-open .main {
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-rows: auto minmax(0, 1fr);
+	}
 }
 
 .app.shared-link-preview .right {
@@ -524,7 +540,7 @@ html, body {
 	min-height: 0;
 }
 
-.app.shared-link-preview .sidebar,
+.app.shared-link-preview:not(.reader-files-open) .sidebar,
 .app.shared-link-preview .mobile-tabs,
 .app.shared-link-preview .editor-panel,
 .app.shared-link-preview .divider-handle,

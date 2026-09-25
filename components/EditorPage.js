@@ -49,6 +49,8 @@ export default function EditorPage() {
 	// A shared link first shows only its preview under a thin reader bar. Opening
 	// the editor restores the normal editor/preview workspace.
 	const [sharedEditorOpen, setSharedEditorOpen] = useState(false);
+	// Whether the reader view shows its (read-only) file list.
+	const [readerFilesOpen, setReaderFilesOpen] = useState(false);
 	const [showShare, setShowShare] = useState(false);
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(
 		initial.files.length === 1,
@@ -265,12 +267,27 @@ export default function EditorPage() {
 		resolvePreviewFile(files, activeFile)?.name ?? '';
 
 	return html`
-		<div class="app ${showSharedPreviewOnly ? 'shared-link-preview' : ''}">
+		<div
+			class="app ${showSharedPreviewOnly ? 'shared-link-preview' : ''} ${showSharedPreviewOnly &&
+			readerFilesOpen
+				? 'reader-files-open'
+				: ''}"
+		>
 			${showSharedPreviewOnly
 				? html`<div class="topbar reader-bar">
 						<a class="logo" href="/about" title="linkify.ink">
 							<div class="logo-dot"></div>
 						</a>
+						<button
+							class="btn btn-icon"
+							aria-label="Toggle file list"
+							aria-expanded=${readerFilesOpen}
+							onClick=${() => setReaderFilesOpen((v) => !v)}
+						>
+							<${Icon}
+								name=${readerFilesOpen ? 'sidebar-collapse' : 'sidebar-expand'}
+							/>
+						</button>
 						<span class="reader-file-name" title=${readerFileName}>
 							${readerFileName}
 						</span>
@@ -329,6 +346,7 @@ export default function EditorPage() {
 					onApplyStarter=${applyStarter}
 					collapsed=${sidebarCollapsed}
 					onToggleCollapse=${() => setSidebarCollapsed((v) => !v)}
+					readOnly=${showSharedPreviewOnly}
 				/>
 
 				<div class="right mobile-tab-${mobileTab}" ref=${rightRef}>

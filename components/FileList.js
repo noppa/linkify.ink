@@ -21,6 +21,7 @@ const html = htm.bind(h);
  *   onApplyStarter: (key: string) => void,
  *   collapsed: boolean,
  *   onToggleCollapse: () => void,
+ *   readOnly?: boolean,
  * }} props
  */
 export default function FileList({
@@ -34,6 +35,7 @@ export default function FileList({
 	onApplyStarter,
 	collapsed,
 	onToggleCollapse,
+	readOnly = false,
 }) {
 	const uploadRef = useRef(/** @type {HTMLInputElement | null} */ (null));
 
@@ -96,6 +98,29 @@ export default function FileList({
 			e.preventDefault();
 			setEditing(null);
 		}
+	}
+
+	// Read-only is the shared-link reader view: just the list to pick a file to
+	// preview, with every editing control left to the full editor.
+	if (readOnly) {
+		return html`
+			<aside class="sidebar">
+				<ul class="file-list">
+					${files.map(
+						(f, i) => html`
+							<li
+								key=${f.name}
+								class="file-item ${i === activeIndex ? 'active' : ''}"
+								onClick=${() => onSelect(i)}
+							>
+								<${Icon} name=${iconForFile(f.name)} />
+								<span class="file-item-name">${f.name}</span>
+							</li>
+						`,
+					)}
+				</ul>
+			</aside>
+		`;
 	}
 
 	return html`
