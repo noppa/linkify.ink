@@ -20,6 +20,10 @@ import zstdWasmBase64DataUrl from './node_modules/@bokuweb/zstd-wasm/dist/web/zs
 import * as Argon2 from 'argon2-browser';
 // @ts-ignore
 import argon2WasmBase64DataUrl from './node_modules/argon2-browser/dist/argon2.wasm';
+// The shared zstd dictionary links are compressed with, keyed by the link format
+// version that uses it. Committed and frozen: see dictionaries/README.md.
+// @ts-ignore
+import zstdDictionaryV2DataUrl from './dictionaries/v2.dict.zst';
 
 export { ZstdWasm, zstdWasmBase64DataUrl, Argon2, argon2WasmBase64DataUrl };
 
@@ -33,4 +37,5 @@ export const linkifyInkCodecDependencies = {
 	zstdWasmUrl: zstdWasmBase64DataUrl,
 	argon2: Argon2,
 	argon2WasmUrl: argon2WasmBase64DataUrl,
+	zstdDictionaryUrls: { 2: zstdDictionaryV2DataUrl },
 };

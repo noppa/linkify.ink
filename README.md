@@ -15,17 +15,19 @@ This makes it a natural fit for the kind of small, ephemeral sharing that usuall
   - **Password** — the payload is encrypted with AES-256-GCM, using a key derived from your password with Argon2id.
   - **Recipient key (ECDH)** — the recipient opens the `/receive` page, which generates an ephemeral keypair in their browser. They send you their public key, you encrypt directly to it. Only they can decrypt — there is no password to leak.
 - **Receive page** — decrypts incoming payloads, lets the recipient download everything or open the files in the editor. Also handles payloads too large to survive as clickable links: paste the raw fragment in directly.
-- **Compression** — files are tar-packed and compressed with zstd (level 19) to squeeze the most out of the URL length budget.
+- **Compression** — files are tar-packed and compressed with zstd (level 19) and a shared dictionary to squeeze the most out of the URL length budget.
 
 ## How it works
 
 The encoding pipeline is:
 
 ```
-files → tar → zstd → [encrypt] → base64url → https://linkify.ink/#<payload>
+files → tar → zstd + shared dictionary → [encrypt] → base64url → https://linkify.ink/#<payload>
 ```
 
 The payload starts with a flag byte (encryption type + format version), followed by mode-specific headers (salt + IV for password mode, ephemeral public key + IV for ECDH), then the ciphertext or plain payload: a small JSON metadata block and the compressed tar archive.
+
+The compressor is primed with a **shared dictionary**: 3.5 MB of text most links contain anyway — general web text picked by zstd's dictionary trainer, English words and phrases, the commonest words of 41 languages, HTML, CSS and JS vocabulary, the usual document shell. Both ends have it, so no link has to spell that text out itself. Over a held-out corpus it makes English links 13% shorter in total and small pages and notes 23% shorter; links in other languages get 10% and 16% shorter. It ships inside `vendor.codec.bundle.js`, is committed zstd-compressed in [`dictionaries/`](dictionaries/), and is frozen: it is part of the link format, so a better dictionary is a new format version, never an edit. Links made before it (format 1) still open. How it was built and measured: [`demo/shared-dictionary/`](demo/shared-dictionary/).
 
 Everything runs client-side using web platform primitives:
 

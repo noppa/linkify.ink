@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Q3 Migration Review</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #1e293b;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --danger: #f87171;
+      --ok: #4ade80;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+    header {
+      padding: 32px 24px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    h1 { margin: 0 0 8px; font-size: 28px; }
+    .subtitle { color: var(--muted); font-size: 14px; }
+    main { max-width: 1100px; margin: 0 auto; padding: 24px; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+    .card {
+      background: var(--panel);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    }
+    .card h3 { margin: 0 0 4px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+    .card .value { font-size: 32px; font-weight: 700; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+    .badge.ok { background: rgba(74, 222, 128, 0.15); color: var(--ok); }
+    .badge.danger { background: rgba(248, 113, 113, 0.15); color: var(--danger); }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+    th { color: var(--muted); font-weight: 600; cursor: pointer; }
+    tr:hover td { background: rgba(255, 255, 255, 0.03); }
+    pre { background: #020617; padding: 16px; border-radius: 8px; overflow-x: auto; font-size: 13px; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+    .tab { background: transparent; border: 1px solid rgba(255,255,255,0.1); color: var(--text); padding: 6px 14px; border-radius: 6px; cursor: pointer; }
+    .tab.active { background: var(--accent); color: #0f172a; border-color: var(--accent); }
+    .hidden { display: none; }
+    @media (max-width: 640px) {
+      header { padding: 20px 16px; }
+      .card .value { font-size: 24px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Q3 Database Migration Review</h1>
+    <div class="subtitle">Prepared for the platform team &middot; Last updated September 18</div>
+  </header>
+  <main>
+    <section class="grid">
+      <div class="card"><h3>Tables migrated</h3><div class="value">142 / 150</div><span class="badge ok">On track</span></div>
+      <div class="card"><h3>Average latency</h3><div class="value">38 ms</div><span class="badge ok">&minus;12% vs. Q2</span></div>
+      <div class="card"><h3>Failed jobs</h3><div class="value">7</div><span class="badge danger">Needs attention</span></div>
+      <div class="card"><h3>Estimated completion</h3><div class="value">Oct 4</div><span class="badge ok">Within window</span></div>
+    </section>
+
+    <section>
+      <h2>Summary</h2>
+      <p>The migration from the legacy PostgreSQL 11 cluster to the new managed instance is mostly complete. Eight tables remain, all of them in the billing schema, and they are blocked on a foreign key constraint that the old application still relies on. We recommend scheduling a short maintenance window next week so that the remaining tables can be moved together, rather than one at a time.</p>
+      <p>Overall performance has improved. Query latency dropped by about twelve percent, mostly because the new instance has more memory and the connection pool is configured correctly. However, a small number of reports are now slower, and we believe this is caused by missing indexes that were created manually on the old cluster and were never added to the migration scripts.</p>
+    </section>
+
+    <section>
+      <h2>Details</h2>
+      <div class="tabs">
+        <button class="tab active" data-tab="jobs">Failed jobs</button>
+        <button class="tab" data-tab="indexes">Missing indexes</button>
+      </div>
+      <div id="jobs" class="panel">
+        <table>
+          <thead><tr><th data-sort="name">Job</th><th data-sort="table">Table</th><th data-sort="error">Error</th><th data-sort="retries">Retries</th></tr></thead>
+          <tbody id="job-rows"></tbody>
+        </table>
+      </div>
+      <div id="indexes" class="panel hidden">
+        <pre><code>CREATE INDEX CONCURRENTLY idx_invoices_customer_id ON billing.invoices (customer_id);
+CREATE INDEX CONCURRENTLY idx_payments_created_at ON billing.payments (created_at DESC);
+CREATE INDEX CONCURRENTLY idx_events_user_id_type ON analytics.events (user_id, event_type);</code></pre>
+      </div>
+    </section>
+
+    <section>
+      <h2>Next steps</h2>
+      <ol>
+        <li>Add the three missing indexes to the migration scripts and apply them to the new instance.</li>
+        <li>Schedule a maintenance window for the billing schema and notify the support team in advance.</li>
+        <li>Remove the legacy foreign key once the application no longer depends on it.</li>
+        <li>Decommission the old cluster after two weeks without incidents.</li>
+      </ol>
+    </section>
+  </main>
+
+  <script>
+    const jobs = [
+      { name: 'sync-invoices', table: 'billing.invoices', error: 'foreign key violation', retries: 3 },
+      { name: 'sync-payments', table: 'billing.payments', error: 'timeout after 30s', retries: 5 },
+      { name: 'backfill-events', table: 'analytics.events', error: 'disk quota exceeded', retries: 1 },
+      { name: 'sync-refunds', table: 'billing.refunds', error: 'foreign key violation', retries: 3 },
+    ];
+
+    function renderRows(rows) {
+      const tbody = document.getElementById('job-rows');
+      tbody.innerHTML = rows
+        .map((job) => `<tr><td>${job.name}</td><td><code>${job.table}</code></td><td>${job.error}</td><td>${job.retries}</td></tr>`)
+        .join('');
+    }
+
+    let sortKey = 'name';
+    let ascending = true;
+    document.querySelectorAll('th[data-sort]').forEach((th) => {
+      th.addEventListener('click', () => {
+        const key = th.dataset.sort;
+        ascending = key === sortKey ? !ascending : true;
+        sortKey = key;
+        const sorted = [...jobs].sort((a, b) => (a[key] > b[key] ? 1 : -1) * (ascending ? 1 : -1));
+        renderRows(sorted);
+      });
+    });
+
+    document.querySelectorAll('.tab').forEach((button) => {
+      button.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach((b) => b.classList.remove('active'));
+        button.classList.add('active');
+        document.querySelectorAll('.panel').forEach((panel) => {
+          panel.classList.toggle('hidden', panel.id !== button.dataset.tab);
+        });
+      });
+    });
+
+    renderRows(jobs);
+  </script>
+</body>
+</html>
