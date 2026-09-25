@@ -10,7 +10,9 @@ import * as path from 'node:path';
 // colours and text of a set of probe elements in a fixture page, captures it,
 // renders the capture in the same viewport, and demands the same numbers back.
 
-const root = path.join(import.meta.dirname, '..');
+// Playwright loads specs through its CommonJS transform (package.json has no
+// "type": "module"), where import.meta is a syntax error.
+const root = path.join(__dirname, '..');
 
 // Every probe is reachable from a fragment link, which is the condition under
 // which the capture keeps an element's id.
@@ -153,8 +155,12 @@ test('full-page capture reproduces the rendered page', async ({ page }) => {
 		for (const key of /** @type {const} */ (['x', 'y', 'width', 'height'])) {
 			expect(Math.abs(actual[key] - expected[key]), `${expected.id}.${key}`).toBeLessThanOrEqual(1);
 		}
+		// Font sizes are rounded to two decimals too: a form control's default
+		// 13.3333px comes back as 13.33px.
+		const fontSizeDiff = Math.abs(parseFloat(actual.fontSize) - parseFloat(expected.fontSize));
+		expect(fontSizeDiff, `${expected.id}.fontSize`).toBeLessThanOrEqual(0.005);
 		for (const key of /** @type {const} */ ([
-			'color', 'background', 'fontSize', 'fontWeight', 'whiteSpace', 'before', 'after', 'text',
+			'color', 'background', 'fontWeight', 'whiteSpace', 'before', 'after', 'text',
 		])) {
 			expect(actual[key], `${expected.id}.${key}`).toBe(expected[key]);
 		}
