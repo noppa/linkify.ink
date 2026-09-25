@@ -131,19 +131,8 @@ async function captureToLink(options) {
 	const files = [{ name: 'article.html', data: new TextEncoder().encode(capture.html) }];
 
 	// Metadata is stored *uncompressed* in the payload, so only fields that earn
-	// their bytes go in. `preview` names the file to show; `nojs: 1` asks the
-	// preview not to run scripts.
-	//
-	// Neither mode ships a script — article mode strips them, full mode rebuilds
-	// the page from computed styles and never copies them — so the flag is eight
-	// bytes of belt-and-braces: the preview's default stays "off" even for a
-	// capture that somehow carried one, and it does not depend on which mode
-	// produced the link.
-	//
-	// This is a default, not a boundary: metadata is author-controlled, so a
-	// hostile link can simply omit it. The isolation that actually holds is the
-	// throwaway sandbox origin the preview runs on.
-	const { url, chars } = await buildLink(files, { preview: 'article.html', nojs: 1 });
+	// their bytes go in. `preview` names the file to show.
+	const { url, chars } = await buildLink(files, { preview: 'article.html' });
 
 	return {
 		url,

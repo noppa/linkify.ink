@@ -16,11 +16,6 @@
 				new URLSearchParams(location.search).get('parent') ||
 				'https://linkify.ink';
 			let pendingEntry = 'index.html';
-			// Whether the *previewed* document may run scripts. This loader always
-			// runs its own (registering the SW below is the entire preview
-			// mechanism), so the switch is applied to the nested content document as
-			// a Content-Security-Policy — see showEntry.
-			let pendingNoJs = false;
 			let registration = null;
 			// Bumped on each (re)render so the nested iframe URL always changes and
 			// actually reloads — assigning an unchanged src would be a no-op, so edits
@@ -92,16 +87,10 @@
 			// (and keeps the SW registration) for the life of the preview, rather than
 			// navigating itself away with location.replace.
 			//
-			// allow-scripts is on this frame even in JS-off mode, and the flags never
-			// change: script execution is decided by a script-src 'none' CSP on the
-			// previewed document instead — set as a header by the service worker, or
-			// as a meta tag by the blob fallback below. Withholding allow-scripts
-			// looks stricter, but it takes the preview out with it: a frame that
-			// can't run scripts isn't controlled by a service worker in Safari, so
-			// the navigation below bypasses the worker that serves every file in the
-			// preview and lands on a blank document. CSP is enforced by the browser
-			// just as sandbox flags are; what it costs is that it has to be attached
-			// to each response rather than declared once on the frame.
+			// allow-scripts is not optional: a frame that can't run scripts isn't
+			// controlled by a service worker in Safari, so the navigation below would
+			// bypass the worker that serves every file in the preview and land on a
+			// blank document.
 			//
 			// allow-same-origin is not optional either: a sandboxed document on an
 			// opaque origin is not controlled by a service worker anywhere, so the
@@ -173,12 +162,6 @@
 			/** Point the document's own file references at their blob URLs. */
 			function rewriteReferences(source, urlByName) {
 				const doc = new DOMParser().parseFromString(source, 'text/html');
-				if (pendingNoJs) {
-					const policy = doc.createElement('meta');
-					policy.httpEquiv = 'Content-Security-Policy';
-					policy.content = "script-src 'none'; object-src 'none'; frame-src 'none'";
-					(doc.head || doc.documentElement).prepend(policy);
-				}
 				for (const element of doc.querySelectorAll('[src], [href], [poster]')) {
 					for (const attribute of ['src', 'href', 'poster']) {
 						const value = element.getAttribute(attribute);
@@ -221,17 +204,14 @@
 				if (event.origin !== PARENT_ORIGIN) return;
 				if (!event.data || event.data.type !== 'files') return;
 				pendingEntry = event.data.entry || 'index.html';
-				pendingNoJs = Boolean(event.data.nojs);
 				if (!serviceWorkerReady) {
 					renderWithBlobUrls(event.data.files);
 					return;
 				}
-				// Forward the file map to the SW for fetch interception, along with the
-				// JS-off flag it turns into a script-src 'none' header on every file.
+				// Forward the file map to the SW for fetch interception.
 				navigator.serviceWorker.controller?.postMessage({
 					type: 'files',
 					files: event.data.files,
-					nojs: pendingNoJs,
 				});
 			});
 

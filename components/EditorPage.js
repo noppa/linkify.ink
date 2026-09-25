@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from '../libraries.bundle.js';
 import { htm } from '../libraries.bundle.js';
 import FileList from './FileList.js';
 import Editor from './Editor.js';
-import Preview from './Preview.js';
+import Preview, { resolvePreviewFile } from './Preview.js';
 import ShareModal from './ShareModal.js';
 import Icon from '../lib/icons.js';
 import { linkify, LinkifyInk } from '../lib/linkify.js';
@@ -36,27 +36,18 @@ export default function EditorPage() {
 			pending !== null || window.location.hash.length > 1;
 		return {
 			files: pending?.files ?? STARTERS[DEFAULT_STARTER].files(),
-			metadata: pending?.metadata ?? null,
 			cameFromSharedLink,
 		};
 	});
 	const [files, setFiles] = useState(initial.files);
-	// Metadata travels with the link, not with the files, so it survives edits —
-	// a reader who opens a `nojs: 1` capture and tweaks a file keeps the preview's
-	// scripts-off default rather than silently re-enabling them.
-	const [metadata, setMetadata] = useState(
-		/** @type {import('../lib/types.js').Metadata | null} */ (
-			initial.metadata
-		),
-	);
 	const [starter, setStarter] = useState(DEFAULT_STARTER);
 	const [activeIndex, setActiveIndex] = useState(0);
 	// Mobile-only editor/preview tab switcher; shared links start on the preview.
 	const [mobileTab, setMobileTab] = useState(
 		initial.cameFromSharedLink ? 'preview' : 'editor',
 	);
-	// On desktop a shared link first shows only its preview. Opening the editor
-	// restores the normal side-by-side editor/preview workspace.
+	// A shared link first shows only its preview under a thin reader bar. Opening
+	// the editor restores the normal editor/preview workspace.
 	const [sharedEditorOpen, setSharedEditorOpen] = useState(false);
 	const [showShare, setShowShare] = useState(false);
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(
@@ -98,7 +89,7 @@ export default function EditorPage() {
 		}
 		window.history.replaceState(null, '', window.location.pathname);
 		linkify.readLink(hash)
-			.then(({ files: decoded, metadata: decodedMetadata }) => {
+			.then(({ files: decoded }) => {
 				setFiles(
 					decoded.map((f) => ({
 						name: f.name,
@@ -106,7 +97,6 @@ export default function EditorPage() {
 						content: f.data,
 					})),
 				);
-				setMetadata(decodedMetadata);
 				setActiveIndex(0);
 				setSidebarCollapsed(decoded.length === 1);
 				defaultReadmeUntouched.current = false;
@@ -171,10 +161,9 @@ export default function EditorPage() {
 		setHashLoading(true);
 		setHashError('');
 		try {
-			const { files: decoded, metadata: decodedMetadata } =
-				await linkify.readLink(hashPending, {
-					password: hashPassword,
-				});
+			const { files: decoded } = await linkify.readLink(hashPending, {
+				password: hashPassword,
+			});
 			setFiles(
 				decoded.map((f) => ({
 					name: f.name,
@@ -182,7 +171,6 @@ export default function EditorPage() {
 					content: f.data,
 				})),
 			);
-			setMetadata(decodedMetadata);
 			setActiveIndex(0);
 			setSidebarCollapsed(decoded.length === 1);
 			defaultReadmeUntouched.current = false;
@@ -273,30 +261,51 @@ export default function EditorPage() {
 	const activeFile = files[activeIndex] ?? null;
 	const showSharedPreviewOnly =
 		initial.cameFromSharedLink && !sharedEditorOpen;
+	const readerFileName =
+		resolvePreviewFile(files, activeFile)?.name ?? '';
 
 	return html`
-		<div class="app">
-			<div class="topbar">
-				<a class="logo" href="/about">
-					<div class="logo-dot"></div>
-					<span class="logo-name">linkify.ink</span>
-				</a>
-				<div class="topbar-actions">
-					${showSharedPreviewOnly &&
-					html`<button
-						class="btn open-editor-btn"
-						onClick=${() => setSharedEditorOpen(true)}
-					>
-						<${Icon} name="pencil" /> Open editor
-					</button>`}
-					<button class="btn" onClick=${() => downloadFiles(files)}>
-						<${Icon} name="download" /> Download
-					</button>
-					<button class="btn btn-primary" onClick=${() => setShowShare(true)}>
-						<${Icon} name="link" /> Share
-					</button>
-				</div>
-			</div>
+		<div class="app ${showSharedPreviewOnly ? 'shared-link-preview' : ''}">
+			${showSharedPreviewOnly
+				? html`<div class="topbar reader-bar">
+						<a class="logo" href="/about" title="linkify.ink">
+							<div class="logo-dot"></div>
+						</a>
+						<span class="reader-file-name" title=${readerFileName}>
+							${readerFileName}
+						</span>
+						<div class="topbar-actions">
+							<button
+								class="btn"
+								onClick=${() => {
+									setSharedEditorOpen(true);
+									setMobileTab('editor');
+								}}
+							>
+								<${Icon} name="pencil" /> Open in editor
+							</button>
+							<button class="btn" onClick=${() => downloadFiles(files)}>
+								<${Icon} name="download" /> Download
+							</button>
+						</div>
+					</div>`
+				: html`<div class="topbar">
+						<a class="logo" href="/about">
+							<div class="logo-dot"></div>
+							<span class="logo-name">linkify.ink</span>
+						</a>
+						<div class="topbar-actions">
+							<button class="btn" onClick=${() => downloadFiles(files)}>
+								<${Icon} name="download" /> Download
+							</button>
+							<button
+								class="btn btn-primary"
+								onClick=${() => setShowShare(true)}
+							>
+								<${Icon} name="link" /> Share
+							</button>
+						</div>
+					</div>`}
 
 			${hashError &&
 			html`
@@ -322,12 +331,7 @@ export default function EditorPage() {
 					onToggleCollapse=${() => setSidebarCollapsed((v) => !v)}
 				/>
 
-				<div
-					class="right mobile-tab-${mobileTab} ${showSharedPreviewOnly
-						? 'shared-link-preview'
-						: ''}"
-					ref=${rightRef}
-				>
+				<div class="right mobile-tab-${mobileTab}" ref=${rightRef}>
 					<div class="mobile-tabs">
 						<button
 							class="mobile-tab ${mobileTab === 'editor' ? 'active' : ''}"
@@ -357,7 +361,6 @@ export default function EditorPage() {
 					<${Preview}
 						files=${files}
 						activeFile=${activeFile}
-						metadata=${metadata}
 					/>
 				</div>
 			</div>

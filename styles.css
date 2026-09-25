@@ -380,33 +380,6 @@ html, body {
 	background: var(--bg2);
 }
 
-/* Right-aligned control in a panel header (the preview's scripts toggle). */
-.panel-header-toggle {
-	display: flex;
-	align-items: center;
-	gap: 4px;
-	margin-left: auto;
-	padding: 1px 6px;
-	font: inherit;
-	line-height: 1.6;
-	color: inherit;
-	background: transparent;
-	border: 1px solid var(--border);
-	border-radius: 3px;
-	cursor: pointer;
-}
-
-.panel-header-toggle:hover {
-	background: var(--bg);
-}
-
-/* Scripts disabled is the safe state, so it is the one that gets no alarm colour;
-   "on" is what's worth noticing when a link you didn't write is running code. */
-.panel-header-toggle.on {
-	color: var(--warn);
-	border-color: currentColor;
-}
-
 /* ── Editor ── */
 .editor-body {
 	flex: 1;
@@ -504,24 +477,59 @@ html, body {
 	display: none;
 }
 
-@media (min-width: 641px) {
-	/* A shared link starts as a reader view. Opening its editor removes this class
-	   and returns to the regular side-by-side workspace. */
-	.right.shared-link-preview {
-		display: flex;
-		flex-direction: column;
-	}
+/* ── Shared-link reader view ──
+   A shared link starts as just its preview under one thin bar. Opening the
+   editor removes .shared-link-preview and returns to the regular workspace.
+   The selectors carry .app so they outrank the mobile layout rules below. */
+.app.shared-link-preview {
+	grid-template-rows: 32px auto 1fr;
+}
 
-	.right.shared-link-preview .preview-panel {
-		flex: 1;
-		min-height: 0;
-	}
+.reader-bar {
+	justify-content: flex-start;
+	padding: 0 8px;
+}
 
-	.right.shared-link-preview .mobile-tabs,
-	.right.shared-link-preview .editor-panel,
-	.right.shared-link-preview .divider-handle {
-		display: none;
-	}
+.reader-bar .logo {
+	flex-shrink: 0;
+}
+
+.reader-file-name {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 12px;
+	font-weight: 600;
+}
+
+.reader-bar .btn {
+	padding: 2px 8px;
+}
+
+.app.shared-link-preview .main {
+	grid-template-columns: minmax(0, 1fr);
+	grid-template-rows: minmax(0, 1fr);
+}
+
+.app.shared-link-preview .right {
+	display: flex;
+	flex-direction: column;
+}
+
+.app.shared-link-preview .preview-panel {
+	display: flex;
+	flex: 1;
+	min-height: 0;
+}
+
+.app.shared-link-preview .sidebar,
+.app.shared-link-preview .mobile-tabs,
+.app.shared-link-preview .editor-panel,
+.app.shared-link-preview .divider-handle,
+.app.shared-link-preview .preview-panel .panel-header {
+	display: none;
 }
 
 .mobile-tab {
@@ -773,10 +781,6 @@ html, body {
 
 /* ── Mobile ── */
 @media (max-width: 640px) {
-	.open-editor-btn {
-		display: none;
-	}
-
 	/* .main.sidebar-collapsed also sets grid-template-columns, and a media query
 	   adds no specificity — so the collapsed rule has to be named here too, or a
 	   collapsed sidebar keeps its two desktop columns while these rows apply and

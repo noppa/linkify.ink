@@ -27,13 +27,7 @@
 
 /**
  * @typedef {{ name: string, data: Uint8Array<ArrayBuffer> }} FileEntry
- * @typedef {{ preview?: string, fullscreen?: boolean, nojs?: 0 | 1, [k: string]: unknown }} Metadata
- *
- * `nojs` asks the reader not to execute the link's scripts. 1/0 rather than a
- * boolean because metadata is stored uncompressed and JSON spells `false` out in
- * full; absent means absent, which reads as "no opinion" and so as scripts-on.
- * It expresses intent only — anyone can mint a link without it, so it is a
- * default for readers, never a guarantee against authors.
+ * @typedef {{ preview?: string, fullscreen?: boolean, [k: string]: unknown }} Metadata
  *
  * @typedef {{
  *   init: (wasmUrl: string) => Promise<unknown>,

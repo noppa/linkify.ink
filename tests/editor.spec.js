@@ -218,12 +218,9 @@ test.describe('editor page', () => {
 		await expect(preview.locator('code .hljs-keyword').first()).toHaveText('def');
 	});
 
-	test('serves a js-off preview from the service worker with scripts still sandboxed in', async ({
+	test('runs scripts in an HTML preview served from the service worker', async ({
 		page,
 	}) => {
-		// The js-off switch is a script-src 'none' CSP on the served document, not a
-		// withheld allow-scripts: a frame that can't run scripts isn't controlled by
-		// a service worker in Safari, so the preview came up blank there.
 		const consoleMessages = /** @type {string[]} */ ([]);
 		page.on('console', (message) => consoleMessages.push(message.text()));
 		await page.goto('/');
@@ -237,9 +234,6 @@ test.describe('editor page', () => {
 		const loader = page.frameLocator('.preview-iframe');
 		const preview = loader.frameLocator('#content');
 		await expect(preview.locator('body')).toHaveAttribute('data-ran', 'yes');
-
-		await page.getByRole('button', { name: /js on/i }).click();
-		await expect(preview.locator('body')).not.toHaveAttribute('data-ran', 'yes');
 		await expect(preview.locator('h1')).toHaveText('Hello');
 		await expect(loader.locator('#content')).toHaveAttribute(
 			'sandbox',
@@ -265,13 +259,18 @@ test.describe('editor page', () => {
 		// from the already-mounted editor to its own hash is same-document navigation.
 		await page.reload();
 
-		await expect(page.locator('.right')).toHaveClass(/shared-link-preview/);
+		await expect(page.locator('.app')).toHaveClass(/shared-link-preview/);
+		await expect(page.locator('.reader-file-name')).toHaveText('README.md');
 		await expect(page.locator('.preview-panel')).toBeVisible();
+		await expect(page.locator('.preview-panel .panel-header')).toBeHidden();
 		await expect(page.locator('.editor-panel')).toBeHidden();
-		await expect(page.locator('.sidebar')).toHaveClass(/collapsed/);
+		await expect(page.locator('.sidebar')).toBeHidden();
+		await expect(page.getByRole('button', { name: 'Share' })).toHaveCount(0);
+		await expect(page.getByRole('button', { name: 'Download' })).toBeVisible();
 
-		await page.getByRole('button', { name: 'Open editor' }).click();
-		await expect(page.locator('.right')).not.toHaveClass(/shared-link-preview/);
+		await page.getByRole('button', { name: 'Open in editor' }).click();
+		await expect(page.locator('.app')).not.toHaveClass(/shared-link-preview/);
+		await expect(page.getByRole('button', { name: 'Share' })).toBeVisible();
 		await expect(page.locator('.editor-panel')).toBeVisible();
 		await expect(page.locator('.preview-panel')).toBeVisible();
 		await expect(page.locator('.divider-handle')).toBeVisible();
