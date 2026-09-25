@@ -26,6 +26,16 @@ function isDefaultReadmeOnly(files) {
 	);
 }
 
+/**
+ * The file a shared link opens on: its HTML page when it has one, else the
+ * first file — what the preview would pick for the first file.
+ * @param {FileEntry[]} files
+ */
+function openingIndex(files) {
+	const file = resolvePreviewFile(files, files[0] ?? null);
+	return Math.max(0, files.indexOf(/** @type {FileEntry} */ (file)));
+}
+
 export default function EditorPage() {
 	// Captured once on mount: whether these files arrived via a shared link (URL
 	// hash, or handed off from ReceivePage), before takePendingFiles() consumes
@@ -41,7 +51,9 @@ export default function EditorPage() {
 	});
 	const [files, setFiles] = useState(initial.files);
 	const [starter, setStarter] = useState(DEFAULT_STARTER);
-	const [activeIndex, setActiveIndex] = useState(0);
+	const [activeIndex, setActiveIndex] = useState(() =>
+		openingIndex(initial.files),
+	);
 	// Mobile-only editor/preview tab switcher; shared links start on the preview.
 	const [mobileTab, setMobileTab] = useState(
 		initial.cameFromSharedLink ? 'preview' : 'editor',
@@ -92,14 +104,13 @@ export default function EditorPage() {
 		window.history.replaceState(null, '', window.location.pathname);
 		linkify.readLink(hash)
 			.then(({ files: decoded }) => {
-				setFiles(
-					decoded.map((f) => ({
-						name: f.name,
-						type: guessType(f.name),
-						content: f.data,
-					})),
-				);
-				setActiveIndex(0);
+				const entries = decoded.map((f) => ({
+					name: f.name,
+					type: guessType(f.name),
+					content: f.data,
+				}));
+				setFiles(entries);
+				setActiveIndex(openingIndex(entries));
 				setSidebarCollapsed(decoded.length === 1);
 				defaultReadmeUntouched.current = false;
 			})
@@ -166,14 +177,13 @@ export default function EditorPage() {
 			const { files: decoded } = await linkify.readLink(hashPending, {
 				password: hashPassword,
 			});
-			setFiles(
-				decoded.map((f) => ({
-					name: f.name,
-					type: guessType(f.name),
-					content: f.data,
-				})),
-			);
-			setActiveIndex(0);
+			const entries = decoded.map((f) => ({
+				name: f.name,
+				type: guessType(f.name),
+				content: f.data,
+			}));
+			setFiles(entries);
+			setActiveIndex(openingIndex(entries));
 			setSidebarCollapsed(decoded.length === 1);
 			defaultReadmeUntouched.current = false;
 			setHashPending(null);
@@ -263,8 +273,7 @@ export default function EditorPage() {
 	const activeFile = files[activeIndex] ?? null;
 	const showSharedPreviewOnly =
 		initial.cameFromSharedLink && !sharedEditorOpen;
-	const readerFileName =
-		resolvePreviewFile(files, activeFile)?.name ?? '';
+	const readerFileName = activeFile?.name ?? '';
 
 	return html`
 		<div
@@ -379,6 +388,7 @@ export default function EditorPage() {
 					<${Preview}
 						files=${files}
 						activeFile=${activeFile}
+						followActiveFile=${showSharedPreviewOnly}
 					/>
 				</div>
 			</div>

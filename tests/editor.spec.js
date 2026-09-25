@@ -26,6 +26,8 @@ test.describe('editor page', () => {
 
 		await page.getByRole('button', { name: 'Toggle sidebar' }).click();
 		await page.locator('#starter-select').selectOption('webpage');
+		// Type only once the starter is in the editor, or it can land over the edit.
+		await expect(page.locator('.editor-textarea')).toHaveValue(/Hello, world!/);
 		await page.locator('.file-item', { hasText: 'script.js' }).click();
 		await expect(editor).toHaveClass(/syntax-highlighted/);
 		await expect
@@ -70,6 +72,8 @@ test.describe('editor page', () => {
 		await page.goto('/');
 		await page.getByRole('button', { name: 'Toggle sidebar' }).click();
 		await page.locator('#starter-select').selectOption('webpage');
+		// Type only once the starter is in the editor, or it can land over the edit.
+		await expect(page.locator('.editor-textarea')).toHaveValue(/Hello, world!/);
 		await page.locator('.file-item', { hasText: 'script.js' }).click();
 
 		const editor = page.locator('textarea.editor-textarea');
@@ -226,6 +230,8 @@ test.describe('editor page', () => {
 		await page.goto('/');
 		await page.getByRole('button', { name: 'Toggle sidebar' }).click();
 		await page.locator('#starter-select').selectOption('webpage');
+		// Type only once the starter is in the editor, or it can land over the edit.
+		await expect(page.locator('.editor-textarea')).toHaveValue(/Hello, world!/);
 		await page
 			.locator('.editor-textarea')
 			.fill('<h1>Hello</h1><script>document.body.dataset.ran = "yes"</script>');
@@ -280,5 +286,28 @@ test.describe('editor page', () => {
 		await expect(page.locator('.editor-panel')).toBeVisible();
 		await expect(page.locator('.preview-panel')).toBeVisible();
 		await expect(page.locator('.divider-handle')).toBeVisible();
+	});
+
+	test('the shared-link file list previews whichever file is picked', async ({ page }) => {
+		await page.goto('/about');
+		// The stylesheet comes first, so the link has to open on its HTML page.
+		const sharedUrl = await page.evaluate(async () => {
+			const { linkify } = await import('/lib/linkify.js');
+			const enc = (/** @type {string} */ text) => new TextEncoder().encode(text);
+			return linkify.createLink([
+				{ name: 'style.css', data: enc('h1 { margin: 0; }') },
+				{ name: 'index.html', data: enc('<h1>Hello, world!</h1>') },
+			]);
+		});
+		await page.goto(`/${new URL(sharedUrl).hash}`);
+
+		await expect(page.locator('.reader-file-name')).toHaveText('index.html');
+		const preview = page.frameLocator('.preview-iframe').frameLocator('#content');
+		await expect(preview.locator('h1')).toHaveText('Hello, world!');
+
+		await page.getByRole('button', { name: 'Toggle file list' }).click();
+		await page.locator('.file-item', { hasText: 'style.css' }).click();
+		await expect(page.locator('.reader-file-name')).toHaveText('style.css');
+		await expect(preview.locator('.code-preview code.hljs')).toContainText('margin');
 	});
 });

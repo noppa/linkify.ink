@@ -86,6 +86,8 @@ test.describe('preview without a service worker', () => {
 		await page.goto('/');
 		await page.getByRole('button', { name: 'Toggle sidebar' }).click();
 		await page.locator('#starter-select').selectOption('webpage');
+		// Type only once the starter is in the editor, or it can land over the edit.
+		await expect(page.locator('textarea.editor-textarea')).toHaveValue(/Hello, world!/);
 		await page.locator('textarea.editor-textarea').fill(
 			'<h1>Hello with JS</h1><script>document.body.dataset.ran = "yes"</script>',
 		);

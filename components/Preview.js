@@ -101,9 +101,12 @@ export function resolvePreviewFile(files, activeFile, lastHtmlName = null) {
  * @param {{
  *   files: FileEntry[],
  *   activeFile: FileEntry | null,
- * }} props
+ *   followActiveFile?: boolean,
+ * }} props — `followActiveFile` always previews the active file itself, even a
+ *   stylesheet or script of an HTML page (the shared-link reader view, where
+ *   picking a file means wanting to see it).
  */
-export default function Preview({ files, activeFile }) {
+export default function Preview({ files, activeFile, followActiveFile = false }) {
 	const iframeRef = useRef(/** @type {HTMLIFrameElement | null} */ (null));
 	const sandboxRef = useRef(/** @type {Sandbox | null} */ (null));
 	// Always-current file list, so the sandbox message handlers (which outlive a
@@ -118,11 +121,9 @@ export default function Preview({ files, activeFile }) {
 		lastHtmlNameRef.current = activeFile.name;
 	}
 
-	const previewFile = resolvePreviewFile(
-		files,
-		activeFile,
-		lastHtmlNameRef.current,
-	);
+	const previewFile = followActiveFile
+		? activeFile
+		: resolvePreviewFile(files, activeFile, lastHtmlNameRef.current);
 	const isHtmlPreview = Boolean(previewFile && isHtmlFile(previewFile));
 
 	// Whether the running sandbox had to fall back to rendering from blob: URLs
@@ -434,8 +435,11 @@ function showPreviewError(
 }
 
 /**
- * Show `entry` in the sandbox, reusing the running one when the entry is
- * unchanged (just push the latest files) and otherwise (re)creating it.
+ * Show `entry` in the sandbox, reusing the running one when there is one: the
+ * loader takes the entry along with every file push, so switching between a
+ * project's files never needs a new sandbox. (Recreating one also raced in
+ * local dev, where every sandbox shares one origin: the outgoing service worker
+ * could answer the new loader's request for / with the project's index.html.)
  * @param {HTMLIFrameElement} iframe
  * @param {string} entry
  * @param {SyntheticFile | null} extra — rendered document to inject, if any
@@ -444,13 +448,11 @@ function showPreviewError(
  */
 function showInSandbox(iframe, entry, extra, filesRef, sandboxRef) {
 	const sandbox = sandboxRef.current;
-	if (sandbox && sandbox.entry === entry) {
-		// Same entry already running — just refresh the injected doc and push files.
+	if (sandbox) {
+		sandbox.entry = entry;
 		sandbox.extra = extra;
 		pushFiles(iframe, sandbox, filesRef);
 	} else {
-		// First render, or the entry changed — (re)create the sandbox.
-		teardownSandbox(iframe, sandboxRef);
 		initSandbox(iframe, entry, extra, filesRef, sandboxRef);
 	}
 }
@@ -505,7 +507,7 @@ function initSandbox(iframe, entry, extra, filesRef, sandboxRef) {
 			{
 				type: 'files',
 				files: buildFilesData(filesRef.current, sandbox.extra),
-				entry,
+				entry: sandbox.entry,
 			},
 			origin,
 		);
