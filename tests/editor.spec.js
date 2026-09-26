@@ -26,6 +26,8 @@ test.describe('editor page', () => {
 
 		await page.getByRole('button', { name: 'Toggle sidebar' }).click();
 		await page.locator('#starter-select').selectOption('webpage');
+		// Type only once the starter is in the editor, or it can land over the edit.
+		await expect(page.locator('.editor-textarea')).toHaveValue(/Hello, world!/);
 		await page.locator('.file-item', { hasText: 'script.js' }).click();
 		await expect(editor).toHaveClass(/syntax-highlighted/);
 		await expect
@@ -70,6 +72,8 @@ test.describe('editor page', () => {
 		await page.goto('/');
 		await page.getByRole('button', { name: 'Toggle sidebar' }).click();
 		await page.locator('#starter-select').selectOption('webpage');
+		// Type only once the starter is in the editor, or it can land over the edit.
+		await expect(page.locator('.editor-textarea')).toHaveValue(/Hello, world!/);
 		await page.locator('.file-item', { hasText: 'script.js' }).click();
 
 		const editor = page.locator('textarea.editor-textarea');
@@ -218,17 +222,16 @@ test.describe('editor page', () => {
 		await expect(preview.locator('code .hljs-keyword').first()).toHaveText('def');
 	});
 
-	test('serves a js-off preview from the service worker with scripts still sandboxed in', async ({
+	test('runs scripts in an HTML preview served from the service worker', async ({
 		page,
 	}) => {
-		// The js-off switch is a script-src 'none' CSP on the served document, not a
-		// withheld allow-scripts: a frame that can't run scripts isn't controlled by
-		// a service worker in Safari, so the preview came up blank there.
 		const consoleMessages = /** @type {string[]} */ ([]);
 		page.on('console', (message) => consoleMessages.push(message.text()));
 		await page.goto('/');
 		await page.getByRole('button', { name: 'Toggle sidebar' }).click();
 		await page.locator('#starter-select').selectOption('webpage');
+		// Type only once the starter is in the editor, or it can land over the edit.
+		await expect(page.locator('.editor-textarea')).toHaveValue(/Hello, world!/);
 		await page
 			.locator('.editor-textarea')
 			.fill('<h1>Hello</h1><script>document.body.dataset.ran = "yes"</script>');
@@ -237,9 +240,6 @@ test.describe('editor page', () => {
 		const loader = page.frameLocator('.preview-iframe');
 		const preview = loader.frameLocator('#content');
 		await expect(preview.locator('body')).toHaveAttribute('data-ran', 'yes');
-
-		await page.getByRole('button', { name: /js on/i }).click();
-		await expect(preview.locator('body')).not.toHaveAttribute('data-ran', 'yes');
 		await expect(preview.locator('h1')).toHaveText('Hello');
 		await expect(loader.locator('#content')).toHaveAttribute(
 			'sandbox',
@@ -265,15 +265,49 @@ test.describe('editor page', () => {
 		// from the already-mounted editor to its own hash is same-document navigation.
 		await page.reload();
 
-		await expect(page.locator('.right')).toHaveClass(/shared-link-preview/);
+		await expect(page.locator('.app')).toHaveClass(/shared-link-preview/);
+		await expect(page.locator('.reader-file-name')).toHaveText('README.md');
 		await expect(page.locator('.preview-panel')).toBeVisible();
+		await expect(page.locator('.preview-panel .panel-header')).toBeHidden();
 		await expect(page.locator('.editor-panel')).toBeHidden();
-		await expect(page.locator('.sidebar')).toHaveClass(/collapsed/);
+		await expect(page.locator('.sidebar')).toBeHidden();
+		await expect(page.getByRole('button', { name: 'Share' })).toHaveCount(0);
+		await expect(page.getByRole('button', { name: 'Download' })).toBeVisible();
 
-		await page.getByRole('button', { name: 'Open editor' }).click();
-		await expect(page.locator('.right')).not.toHaveClass(/shared-link-preview/);
+		await page.getByRole('button', { name: 'Toggle file list' }).click();
+		await expect(page.locator('.sidebar')).toBeVisible();
+		await expect(page.locator('.file-item', { hasText: 'README.md' })).toBeVisible();
+		await expect(page.locator('.add-file')).toHaveCount(0);
+		await expect(page.locator('.file-item-action')).toHaveCount(0);
+
+		await page.getByRole('button', { name: 'Open in editor' }).click();
+		await expect(page.locator('.app')).not.toHaveClass(/shared-link-preview/);
+		await expect(page.getByRole('button', { name: 'Share' })).toBeVisible();
 		await expect(page.locator('.editor-panel')).toBeVisible();
 		await expect(page.locator('.preview-panel')).toBeVisible();
 		await expect(page.locator('.divider-handle')).toBeVisible();
+	});
+
+	test('the shared-link file list previews whichever file is picked', async ({ page }) => {
+		await page.goto('/about');
+		// The stylesheet comes first, so the link has to open on its HTML page.
+		const sharedUrl = await page.evaluate(async () => {
+			const { linkify } = await import('/lib/linkify.js');
+			const enc = (/** @type {string} */ text) => new TextEncoder().encode(text);
+			return linkify.createLink([
+				{ name: 'style.css', data: enc('h1 { margin: 0; }') },
+				{ name: 'index.html', data: enc('<h1>Hello, world!</h1>') },
+			]);
+		});
+		await page.goto(`/${new URL(sharedUrl).hash}`);
+
+		await expect(page.locator('.reader-file-name')).toHaveText('index.html');
+		const preview = page.frameLocator('.preview-iframe').frameLocator('#content');
+		await expect(preview.locator('h1')).toHaveText('Hello, world!');
+
+		await page.getByRole('button', { name: 'Toggle file list' }).click();
+		await page.locator('.file-item', { hasText: 'style.css' }).click();
+		await expect(page.locator('.reader-file-name')).toHaveText('style.css');
+		await expect(preview.locator('.code-preview code.hljs')).toContainText('margin');
 	});
 });

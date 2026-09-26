@@ -38,7 +38,6 @@ function loadPreviewLibs() {
  *   origin: string,
  *   entry: string,
  *   extra: SyntheticFile | null,
- *   nojs: boolean,
  *   ready: boolean,
  *   onMessage: (event: MessageEvent) => void,
  * }} Sandbox
@@ -80,59 +79,52 @@ const HIGHLIGHT_LANGUAGE_BY_EXTENSION = {
 };
 
 /**
+ * Which file the preview shows. When a non-HTML file is open but the project
+ * has HTML, keep showing the last-opened HTML file (or the first HTML file if
+ * none was opened yet), so the rendered page doesn't disappear when you open
+ * its stylesheet or script. Otherwise just follow the active file.
+ * @param {FileEntry[]} files
+ * @param {FileEntry | null} activeFile
+ * @param {string | null} [lastHtmlName]
+ * @returns {FileEntry | null}
+ */
+export function resolvePreviewFile(files, activeFile, lastHtmlName = null) {
+	if (!activeFile || isHtmlFile(activeFile)) return activeFile;
+	return (
+		files.find((f) => f.name === lastHtmlName) ??
+		files.find(isHtmlFile) ??
+		activeFile
+	);
+}
+
+/**
  * @param {{
  *   files: FileEntry[],
  *   activeFile: FileEntry | null,
- *   metadata?: import('../lib/types.js').Metadata | null,
- * }} props
+ *   followActiveFile?: boolean,
+ * }} props — `followActiveFile` always previews the active file itself, even a
+ *   stylesheet or script of an HTML page (the shared-link reader view, where
+ *   picking a file means wanting to see it).
  */
-export default function Preview({ files, activeFile, metadata }) {
+export default function Preview({ files, activeFile, followActiveFile = false }) {
 	const iframeRef = useRef(/** @type {HTMLIFrameElement | null} */ (null));
 	const sandboxRef = useRef(/** @type {Sandbox | null} */ (null));
-	// Whether to block scripts in the previewed document (the sandbox applies this
-	// as a script-src 'none' CSP). A link can ask for this with `nojs: 1` (the
-	// browser extension sets it on every capture), but the reader gets the final
-	// say in both directions — metadata is written by whoever made the link, so it
-	// is a sensible default and nothing more. The real isolation is the throwaway
-	// sandbox origin, which applies either way.
-	const [noJs, setNoJs] = useState(Boolean(metadata?.nojs));
-
-	// Metadata lands asynchronously — a link's files are decoded after this
-	// component has already mounted with the editor's starter files — so the
-	// initial state above is usually `false` and this is what actually applies the
-	// link's preference. Keyed on the value rather than the object so a re-render
-	// with an equivalent metadata object doesn't stomp the reader's own choice.
-	const linkNoJs = Boolean(metadata?.nojs);
-	useEffect(() => {
-		setNoJs(linkNoJs);
-	}, [linkNoJs]);
 	// Always-current file list, so the sandbox message handlers (which outlive a
 	// single render) send the latest contents rather than a stale snapshot.
 	const filesRef = useRef(files);
 	filesRef.current = files;
-	// Name of the most recently *opened* HTML file. Once a project has HTML files
-	// the preview sticks to this one even while the user edits JS/CSS, so the
-	// rendered page doesn't disappear when you open its stylesheet or script.
+	// Name of the most recently *opened* HTML file, which the preview sticks to
+	// while the user edits the project's other files.
 	const lastHtmlNameRef = useRef(/** @type {string | null} */ (null));
 
 	if (activeFile && isHtmlFile(activeFile)) {
 		lastHtmlNameRef.current = activeFile.name;
 	}
 
-	// Resolve which file the preview actually shows. When a non-HTML file is open
-	// but the project has HTML, keep showing the last-opened HTML file (or the
-	// first HTML file if none was opened yet). Otherwise just follow activeFile.
-	let previewFile = activeFile;
-	if (activeFile && !isHtmlFile(activeFile)) {
-		previewFile =
-			files.find((f) => f.name === lastHtmlNameRef.current) ??
-			files.find(isHtmlFile) ??
-			activeFile;
-	}
+	const previewFile = followActiveFile
+		? activeFile
+		: resolvePreviewFile(files, activeFile, lastHtmlNameRef.current);
 	const isHtmlPreview = Boolean(previewFile && isHtmlFile(previewFile));
-	// Synthetic previews (markdown, text, and image wrappers) never need to run
-	// scripts. Keep that policy separate from the reader's remembered HTML choice.
-	const previewNoJs = isHtmlPreview ? noJs : true;
 
 	// Whether the running sandbox had to fall back to rendering from blob: URLs
 	// because its service worker was refused (Safari blocks them in a
@@ -165,7 +157,6 @@ export default function Preview({ files, activeFile, metadata }) {
 		renderPreview(
 			iframeRef.current,
 			previewFile,
-			previewNoJs,
 			filesRef,
 			sandboxRef,
 			() => cancelled,
@@ -175,7 +166,7 @@ export default function Preview({ files, activeFile, metadata }) {
 		return () => {
 			cancelled = true;
 		};
-	}, [previewFile, files, previewNoJs]);
+	}, [previewFile, files]);
 
 	// Final teardown on unmount: unregister the sandbox service worker.
 	useEffect(
@@ -185,33 +176,20 @@ export default function Preview({ files, activeFile, metadata }) {
 		[],
 	);
 
-	// The outer frame's flags are the ceiling for everything inside it, so they are
-	// deliberately not the place to control scripts. allow-scripts is load-bearing
-	// here: this frame loads sandbox-loader.html, whose script registers the service
-	// worker that serves every previewed file — withhold it and there is no preview
-	// at all. The same goes for the nested frame the loader puts the content in, so
-	// js-off is applied to the content document as a CSP instead (see
-	// sandbox-loader.html). allow-popups is needed for target=_blank links (which
-	// captured articles put on every external link) to do anything when clicked; a
-	// nested frame cannot grant itself what is withheld here.
+	// The outer frame's flags are the ceiling for everything inside it.
+	// allow-scripts is load-bearing here: this frame loads sandbox-loader.html,
+	// whose script registers the service worker that serves every previewed file —
+	// withhold it and there is no preview at all. Previewed documents always run
+	// their scripts; the isolation is the throwaway sandbox origin. allow-popups
+	// is needed for target=_blank links (which captured articles put on every
+	// external link) to do anything when clicked; a nested frame cannot grant
+	// itself what is withheld here.
 	return html`
 		<div class="panel preview-panel">
 			<div class="panel-header">
 				<${Icon} name="eye" /> preview${
 					previewFile ? ` — ${previewFile.name}` : ''
 				}
-				${isHtmlPreview &&
-				html`<button
-					class="panel-header-toggle ${noJs ? 'off' : 'on'}"
-					onClick=${() => setNoJs((v) => !v)}
-					title=${
-						noJs
-							? "Scripts are not running in this preview. The link asked for this, or you did — click to run them."
-							: 'Scripts are running in this preview. Click to reload it with scripts disabled.'
-					}
-				>
-					<${Icon} name="code" /> js ${noJs ? 'off' : 'on'}
-				</button>`}
 			</div>
 			${swFallback &&
 			isHtmlPreview &&
@@ -242,12 +220,11 @@ export default function Preview({ files, activeFile, metadata }) {
  *
  * @param {HTMLIFrameElement} iframe
  * @param {FileEntry} file
- * @param {boolean} nojs — block scripts in the previewed document
  * @param {{ current: FileEntry[] }} filesRef
  * @param {{ current: Sandbox | null }} sandboxRef
  * @param {() => boolean} isCancelled — true once this render is superseded
  */
-function renderPreview(iframe, file, nojs, filesRef, sandboxRef, isCancelled) {
+function renderPreview(iframe, file, filesRef, sandboxRef, isCancelled) {
 	// TODO: Create utility function getFileExtension
 	const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
 
@@ -255,7 +232,7 @@ function renderPreview(iframe, file, nojs, filesRef, sandboxRef, isCancelled) {
 	// Then exhaustively switch case over it instead of using if/else.
 	if (ext === 'html' || ext === 'htm') {
 		// The HTML file is the entry; the SW serves it (and its subresources) as-is.
-		showInSandbox(iframe, file.name, null, nojs, filesRef, sandboxRef);
+		showInSandbox(iframe, file.name, null, filesRef, sandboxRef);
 		return;
 	}
 
@@ -278,7 +255,6 @@ function renderPreview(iframe, file, nojs, filesRef, sandboxRef, isCancelled) {
 			iframe,
 			PREVIEW_ENTRY,
 			syntheticFile(doc),
-			nojs,
 			filesRef,
 			sandboxRef,
 		);
@@ -287,7 +263,7 @@ function renderPreview(iframe, file, nojs, filesRef, sandboxRef, isCancelled) {
 
 	if (ext === 'md') {
 		// Marked and Mermaid live in the lazy preview bundle. Mermaid fences are
-		// rendered to static SVG before this document enters the scripts-off iframe.
+		// rendered to static SVG before this document enters the sandbox.
 		loadPreviewLibs()
 			.then(({ renderMarkdown }) =>
 				renderMarkdown(new TextDecoder().decode(file.content)),
@@ -298,7 +274,6 @@ function renderPreview(iframe, file, nojs, filesRef, sandboxRef, isCancelled) {
 					iframe,
 					PREVIEW_ENTRY,
 					syntheticFile(previewDocument(rendered, 'markdown-preview')),
-					nojs,
 					filesRef,
 					sandboxRef,
 				);
@@ -308,7 +283,6 @@ function renderPreview(iframe, file, nojs, filesRef, sandboxRef, isCancelled) {
 				showPreviewError(
 					iframe,
 					error,
-					nojs,
 					filesRef,
 					sandboxRef,
 					'Could not render Markdown preview',
@@ -324,7 +298,6 @@ function renderPreview(iframe, file, nojs, filesRef, sandboxRef, isCancelled) {
 				iframe,
 				PREVIEW_ENTRY,
 				syntheticFile(previewDocument('', 'mermaid-preview')),
-				nojs,
 				filesRef,
 				sandboxRef,
 			);
@@ -343,14 +316,13 @@ function renderPreview(iframe, file, nojs, filesRef, sandboxRef, isCancelled) {
 							'mermaid-preview',
 						),
 					),
-					nojs,
 					filesRef,
 					sandboxRef,
 				);
 			})
 			.catch((error) => {
 				if (isCancelled()) return;
-				showPreviewError(iframe, error, nojs, filesRef, sandboxRef);
+				showPreviewError(iframe, error, filesRef, sandboxRef);
 			});
 		return;
 	}
@@ -366,7 +338,6 @@ function renderPreview(iframe, file, nojs, filesRef, sandboxRef, isCancelled) {
 					iframe,
 					PREVIEW_ENTRY,
 					syntheticFile(previewDocument(rendered, 'code-preview')),
-					nojs,
 					filesRef,
 					sandboxRef,
 				);
@@ -376,7 +347,6 @@ function renderPreview(iframe, file, nojs, filesRef, sandboxRef, isCancelled) {
 				showPreviewError(
 					iframe,
 					error,
-					nojs,
 					filesRef,
 					sandboxRef,
 					'Could not highlight code',
@@ -392,7 +362,6 @@ function renderPreview(iframe, file, nojs, filesRef, sandboxRef, isCancelled) {
 		iframe,
 		PREVIEW_ENTRY,
 		syntheticFile(doc),
-		nojs,
 		filesRef,
 		sandboxRef,
 	);
@@ -443,7 +412,6 @@ function previewDocument(body, className) {
 /**
  * @param {HTMLIFrameElement} iframe
  * @param {unknown} error
- * @param {boolean} nojs
  * @param {{ current: FileEntry[] }} filesRef
  * @param {{ current: Sandbox | null }} sandboxRef
  * @param {string} [title]
@@ -451,7 +419,6 @@ function previewDocument(body, className) {
 function showPreviewError(
 	iframe,
 	error,
-	nojs,
 	filesRef,
 	sandboxRef,
 	title = 'Could not render Mermaid diagram',
@@ -462,37 +429,31 @@ function showPreviewError(
 		iframe,
 		PREVIEW_ENTRY,
 		syntheticFile(previewDocument(body, 'mermaid-preview')),
-		nojs,
 		filesRef,
 		sandboxRef,
 	);
 }
 
 /**
- * Show `entry` in the sandbox, reusing the running one when the entry is
- * unchanged (just push the latest files) and otherwise (re)creating it.
+ * Show `entry` in the sandbox, reusing the running one when there is one: the
+ * loader takes the entry along with every file push, so switching between a
+ * project's files never needs a new sandbox. (Recreating one also raced in
+ * local dev, where every sandbox shares one origin: the outgoing service worker
+ * could answer the new loader's request for / with the project's index.html.)
  * @param {HTMLIFrameElement} iframe
  * @param {string} entry
  * @param {SyntheticFile | null} extra — rendered document to inject, if any
- * @param {boolean} nojs — block scripts in the previewed document
  * @param {{ current: FileEntry[] }} filesRef
  * @param {{ current: Sandbox | null }} sandboxRef
  */
-function showInSandbox(iframe, entry, extra, nojs, filesRef, sandboxRef) {
+function showInSandbox(iframe, entry, extra, filesRef, sandboxRef) {
 	const sandbox = sandboxRef.current;
-	if (sandbox && sandbox.entry === entry) {
-		// Same entry already running — just refresh the injected doc and push files.
-		// Toggling scripts doesn't need a new sandbox either: the flag rides along
-		// with the files, and the loader reloads the content frame under the new
-		// policy without disturbing its service worker registration — the expensive
-		// part to recreate.
+	if (sandbox) {
+		sandbox.entry = entry;
 		sandbox.extra = extra;
-		sandbox.nojs = nojs;
 		pushFiles(iframe, sandbox, filesRef);
 	} else {
-		// First render, or the entry changed — (re)create the sandbox.
-		teardownSandbox(iframe, sandboxRef);
-		initSandbox(iframe, entry, extra, nojs, filesRef, sandboxRef);
+		initSandbox(iframe, entry, extra, filesRef, sandboxRef);
 	}
 }
 
@@ -521,11 +482,10 @@ function buildFilesData(files, extra) {
  * @param {HTMLIFrameElement} iframe
  * @param {string} entry
  * @param {SyntheticFile | null} extra
- * @param {boolean} nojs — block scripts in the previewed document
  * @param {{ current: FileEntry[] }} filesRef
  * @param {{ current: Sandbox | null }} sandboxRef
  */
-function initSandbox(iframe, entry, extra, nojs, filesRef, sandboxRef) {
+function initSandbox(iframe, entry, extra, filesRef, sandboxRef) {
 	// Local dev: the sandbox runs on editor port + 1 (see dev-server.mjs), a distinct
 	// origin so its service worker can't hijack the editor. Hosted: a throwaway UUID
 	// subdomain. Either way the origin is fixed for this sandbox's lifetime so we can
@@ -535,7 +495,7 @@ function initSandbox(iframe, entry, extra, nojs, filesRef, sandboxRef) {
 		: `${location.protocol}//${location.hostname}:${Number(location.port) + 1}`;
 
 	/** @type {Sandbox} */
-	const sandbox = { origin, entry, extra, nojs, ready: false, onMessage: () => {} };
+	const sandbox = { origin, entry, extra, ready: false, onMessage: () => {} };
 
 	/** @param {MessageEvent} event */
 	sandbox.onMessage = (event) => {
@@ -547,8 +507,7 @@ function initSandbox(iframe, entry, extra, nojs, filesRef, sandboxRef) {
 			{
 				type: 'files',
 				files: buildFilesData(filesRef.current, sandbox.extra),
-				entry,
-				nojs: sandbox.nojs,
+				entry: sandbox.entry,
 			},
 			origin,
 		);
@@ -576,7 +535,6 @@ function pushFiles(iframe, sandbox, filesRef) {
 			type: 'files',
 			files: buildFilesData(filesRef.current, sandbox.extra),
 			entry: sandbox.entry,
-			nojs: sandbox.nojs,
 		},
 		sandbox.origin,
 	);

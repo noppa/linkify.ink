@@ -18,8 +18,7 @@
 //             become a bad ad blocker and duplicated article mode badly.
 //
 // Neither mode ships scripts: article mode strips them, full mode never copies
-// them. The extension still tags its links `nojs: 1` so the preview's default is
-// the same whichever mode produced the link.
+// them.
 //
 // A classic script, not a module: chrome.scripting.executeScript injects classic
 // scripts, so this reads Readability off the `LinkifyReadability` global that

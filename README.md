@@ -82,11 +82,9 @@ Full mode does not filter, because a full mode that decides what counts as clutt
 
 What it cannot do, by construction: `:hover`, `@keyframes`, `display:none` subtrees (menus, modals, inactive tabs) and anything behind a breakpoint are gone — only the state the page was in at capture time survives. `<canvas>`, `<video>` and `<iframe>` keep their box and lose their content. Scripts are never copied.
 
-### Scripts, and who decides
+### Scripts
 
-Neither mode ships scripts, but whether a preview *runs* them is a read-time decision, not a capture-time one. The preview nests two iframes: an outer one that loads the sandbox loader (whose own script registers the service worker serving every file — that one has to run), and a nested one holding the actual content. The nested frame is where `allow-scripts` is granted or withheld, and sandbox flags only ever narrow going inward, so withholding it is enforced by the browser rather than by cooperation from the page.
-
-Extension captures set `nojs: 1` in the link's metadata, so they open with scripts off. The preview header shows a **js on/off** toggle and the reader can flip it either way. This is a default, not a boundary — metadata is written by whoever made the link, and a hostile one can simply omit it. The isolation that actually holds is the throwaway `sandbox-*.linkify.ink` origin, which applies regardless.
+Neither mode ships scripts. Previews of any link always run whatever scripts it does carry: the preview is served from a throwaway `sandbox-*.linkify.ink` origin, so a page's scripts can't reach the editor or anything else on linkify.ink.
 
 ## Development
 
