@@ -41,7 +41,7 @@ Everything runs client-side using web platform primitives:
 - **No server-side state.** The hash fragment never leaves the browser, so the "service" has nothing to store, leak, or take down. A shared link works as long as the static site is up — and the decoding logic is simple enough to reimplement if it isn't.
 - **Honest end-to-end encryption.** Encryption keys are derived and used entirely in the browser. In ECDH mode, the private key is generated fresh on the receive page and never serialized anywhere.
 - **Minimal moving parts.** The app is plain JavaScript with Preact + htm — no JSX, no build step for the app code itself. Only the vendored npm dependencies are bundled (with esbuild) into a single committed `libraries.bundle.js`. Types are checked from JSDoc annotations with `tsgo --noEmit`.
-- **Sandboxed previews.** Untrusted HTML/JS from a link never runs on the main origin. Previews execute on a `*.sandbox.linkify.ink` wildcard subdomain backed by a tiny Cloudflare Worker, with files served by a per-tab service worker. Safari refuses service workers in a cross-origin frame, which the sandbox is, so there the loader renders the files from `blob:` URLs it mints itself instead — same sandbox origin, same isolation, minus the ability to resolve references made from inside a stylesheet or a module.
+- **Sandboxed previews.** Untrusted HTML/JS from a link never runs on the main origin. Previews execute on a `sandbox-<hash>.linkify.ink` subdomain backed by a tiny Cloudflare Worker, with files served by a service worker. The subdomain is named after a hash of the previewed files (salted per browser, so the hostname can't be matched to a link by anyone else), which means opening the same app again lands on the same origin and finds its `localStorage` and IndexedDB where it left them. Only those exact files can run there, so no other link can reach that storage — and changing a single byte of the app moves it to a new origin with empty storage. Safari refuses service workers in a cross-origin frame, which the sandbox is, so there the loader renders the files from `blob:` URLs it mints itself instead — same sandbox origin, same isolation, minus the ability to resolve references made from inside a stylesheet or a module.
 
 ## Browser extension
 
@@ -84,7 +84,7 @@ What it cannot do, by construction: `:hover`, `@keyframes`, `display:none` subtr
 
 ### Scripts
 
-Neither mode ships scripts. Previews of any link always run whatever scripts it does carry: the preview is served from a throwaway `sandbox-*.linkify.ink` origin, so a page's scripts can't reach the editor or anything else on linkify.ink.
+Neither mode ships scripts. Previews of any link always run whatever scripts it does carry: the preview is served from its own `sandbox-*.linkify.ink` origin, so a page's scripts can't reach the editor or anything else on linkify.ink.
 
 ## Development
 

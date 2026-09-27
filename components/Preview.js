@@ -26,7 +26,7 @@ function loadPreviewLibs() {
  * A rendered preview document that isn't one of the project's own files — e.g.
  * markdown compiled to HTML, or a plain-text file wrapped in a <pre>. It's
  * injected into the sandbox's file map under a reserved name so it, too, is
- * served (and thus isolated) from the throwaway sandbox origin rather than the
+ * served (and thus isolated) from the separate sandbox origin rather than the
  * editor's origin.
  * @typedef {{ name: string, content: Uint8Array }} SyntheticFile
  */
@@ -50,7 +50,7 @@ function isHtmlFile(file) {
 }
 
 const HOSTED_ORIGIN = 'linkify.ink';
-// Sandbox hosts are single-label subdomains (sandbox-<uuid>.linkify.ink) so the
+// Sandbox hosts are single-label subdomains (sandbox-<hash>.linkify.ink) so the
 // free *.linkify.ink Universal SSL cert covers them; a second-level wildcard like
 // *.sandbox.linkify.ink would need a paid Cloudflare cert. The worker runs on a
 // *.linkify.ink route (Cloudflare disallows a sandbox-* route wildcard) and
@@ -180,7 +180,7 @@ export default function Preview({ files, activeFile, followActiveFile = false })
 	// allow-scripts is load-bearing here: this frame loads sandbox-loader.html,
 	// whose script registers the service worker that serves every previewed file —
 	// withhold it and there is no preview at all. Previewed documents always run
-	// their scripts; the isolation is the throwaway sandbox origin. allow-popups
+	// their scripts; the isolation is the separate sandbox origin. allow-popups
 	// is needed for target=_blank links (which captured articles put on every
 	// external link) to do anything when clicked; a nested frame cannot grant
 	// itself what is withheld here.
@@ -212,7 +212,7 @@ export default function Preview({ files, activeFile, followActiveFile = false })
  * Decide what document the preview should show and route it through the sandbox.
  *
  * Every preview type — HTML, markdown, images, plain text — is served from the
- * throwaway sandbox origin rather than the editor's own origin. Rendered
+ * sandbox origin rather than the editor's own origin. Rendered
  * markdown in particular can contain arbitrary HTML/JS (author-supplied, or via
  * a bug in the markdown parser), so it must be isolated just like a hand-written
  * HTML file. HTML files are served as themselves; markdown, text, and images
@@ -486,39 +486,116 @@ function buildFilesData(files, extra) {
  * @param {{ current: Sandbox | null }} sandboxRef
  */
 function initSandbox(iframe, entry, extra, filesRef, sandboxRef) {
-	// Local dev: the sandbox runs on editor port + 1 (see dev-server.mjs), a distinct
-	// origin so its service worker can't hijack the editor. Hosted: a throwaway UUID
-	// subdomain. Either way the origin is fixed for this sandbox's lifetime so we can
-	// keep messaging it as the user edits.
-	const origin = isHosted
-		? `https://${SANDBOX_PREFIX}${crypto.randomUUID()}.${HOSTED_ORIGIN}`
-		: `${location.protocol}//${location.hostname}:${Number(location.port) + 1}`;
-
 	/** @type {Sandbox} */
-	const sandbox = { origin, entry, extra, ready: false, onMessage: () => {} };
-
-	/** @param {MessageEvent} event */
-	sandbox.onMessage = (event) => {
-		if (event.origin !== origin) return;
-		if (event.data?.type !== 'sandbox-ready') return;
-		// The loader is up and controlled by its SW — send the current files.
-		sandbox.ready = true;
-		iframe.contentWindow?.postMessage(
-			{
-				type: 'files',
-				files: buildFilesData(filesRef.current, sandbox.extra),
-				entry: sandbox.entry,
-			},
-			origin,
-		);
-	};
-
-	window.addEventListener('message', sandbox.onMessage);
+	const sandbox = { origin: '', entry, extra, ready: false, onMessage: () => {} };
+	// Recorded before the origin is known, so edits made while it's being hashed
+	// update this sandbox (sent once it's ready) rather than starting another.
 	sandboxRef.current = sandbox;
-	// Pass the editor origin so the loader knows who to trust (the hosted Cloudflare
-	// loader hardcodes it instead; the query param is for the local dev loader).
-	iframe.src = origin + '/?parent=' + encodeURIComponent(location.origin);
+
+	sandboxOriginFor(filesRef.current).then((origin) => {
+		// Torn down while the origin was being worked out.
+		if (sandboxRef.current !== sandbox) return;
+		sandbox.origin = origin;
+
+		/** @param {MessageEvent} event */
+		sandbox.onMessage = (event) => {
+			if (event.origin !== origin) return;
+			if (event.data?.type !== 'sandbox-ready') return;
+			// The loader is up and controlled by its SW — send the current files.
+			sandbox.ready = true;
+			iframe.contentWindow?.postMessage(
+				{
+					type: 'files',
+					files: buildFilesData(filesRef.current, sandbox.extra),
+					entry: sandbox.entry,
+				},
+				origin,
+			);
+		};
+
+		window.addEventListener('message', sandbox.onMessage);
+		// Pass the editor origin so the loader knows who to trust (the hosted
+		// Cloudflare loader hardcodes it instead; the query param is for the local
+		// dev loader). __loader tells a service worker already controlling this
+		// origin — another tab showing the same app — to let the loader itself
+		// through to the network rather than answer / with the app's index.html.
+		iframe.src = origin + '/?__loader&parent=' + encodeURIComponent(location.origin);
+	});
 }
+
+/**
+ * The origin a sandbox for `files` runs on. Local dev: editor port + 1 (see
+ * dev-server.mjs), a distinct origin so its service worker can't hijack the
+ * editor. Hosted: a subdomain named after a hash of the files, so opening the
+ * same app again lands on the same origin and finds its localStorage, IndexedDB
+ * etc. where it left them. Only those exact files can ever run there, so no other
+ * link can reach that storage. The origin is fixed for the sandbox's lifetime, so
+ * edits keep running on the one it started with.
+ * @param {FileEntry[]} files
+ * @returns {Promise<string>}
+ */
+async function sandboxOriginFor(files) {
+	if (!isHosted) {
+		return `${location.protocol}//${location.hostname}:${Number(location.port) + 1}`;
+	}
+	return `https://${SANDBOX_PREFIX}${await hashFiles(files)}.${HOSTED_ORIGIN}`;
+}
+
+// Bump to move every app to a fresh origin (and leave their old storage behind).
+const SANDBOX_HASH_VERSION = 'linkify-sandbox-v1';
+const SANDBOX_SALT_KEY = 'linkify.sandboxSalt';
+
+/**
+ * Hash the files into a DNS label: SHA-256 over the salt and a canonical,
+ * length-prefixed encoding of the files sorted by name, truncated to 128 bits
+ * and hex-encoded (hostnames are case-insensitive, so no base64).
+ * @param {FileEntry[]} files
+ * @returns {Promise<string>}
+ */
+async function hashFiles(files) {
+	const encoder = new TextEncoder();
+	/** @type {Uint8Array[]} */
+	const parts = [encoder.encode(SANDBOX_HASH_VERSION), encoder.encode(sandboxSalt())];
+	const sorted = [...files].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+	for (const file of sorted) {
+		parts.push(encoder.encode(file.name), file.content);
+	}
+	const length = parts.reduce((sum, part) => sum + 4 + part.length, 0);
+	const buffer = new Uint8Array(length);
+	const view = new DataView(buffer.buffer);
+	let offset = 0;
+	for (const part of parts) {
+		view.setUint32(offset, part.length);
+		buffer.set(part, offset + 4);
+		offset += 4 + part.length;
+	}
+	const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', buffer));
+	return Array.from(digest.subarray(0, 16), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * A random salt kept for this browser. The sandbox hostname is visible outside
+ * the browser (DNS, TLS SNI, Cloudflare's logs) even though the link's contents
+ * never are; without the salt anyone holding the same link could compute its
+ * hostname and recognise it there. Storage is per-browser anyway, so salting per
+ * browser costs nothing. If storage is unavailable, a salt for this page load.
+ * @returns {string}
+ */
+function sandboxSalt() {
+	if (sessionSalt) return sessionSalt;
+	try {
+		sessionSalt = localStorage.getItem(SANDBOX_SALT_KEY);
+		if (!sessionSalt) {
+			sessionSalt = crypto.randomUUID();
+			localStorage.setItem(SANDBOX_SALT_KEY, sessionSalt);
+		}
+	} catch {
+		sessionSalt ??= crypto.randomUUID();
+	}
+	return sessionSalt;
+}
+/** @type {string | null} */
+let sessionSalt = null;
 
 /**
  * Push the latest files into an already-running sandbox. The loader forwards them

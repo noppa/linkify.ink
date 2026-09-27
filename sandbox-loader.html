@@ -16,10 +16,15 @@
 				new URLSearchParams(location.search).get('parent') ||
 				'https://linkify.ink';
 			let pendingEntry = 'index.html';
+			// Other tabs showing the same app share this origin and its service
+			// worker, so this loader's files are posted, and fetched, under an id of
+			// its own (see sandbox-sw.js.txt).
+			const SESSION = crypto.randomUUID();
 			let registration = null;
 			// Bumped on each (re)render so the nested iframe URL always changes and
 			// actually reloads — assigning an unchanged src would be a no-op, so edits
-			// wouldn't show. The SW matches on pathname and ignores this query.
+			// wouldn't show. The SW matches on pathname and ignores this query
+			// (it reads only __session, to know whose files to serve).
 			let renderCount = 0;
 			// Whether the service worker actually ended up serving this sandbox. It
 			// doesn't everywhere: this loader is a cross-origin ("third-party") frame,
@@ -41,8 +46,10 @@
 
 					// Tear down the service worker when this sandbox goes away (the parent
 					// rebuilds or removes the iframe, or the editor navigates away). Without
-					// this, every preview build leaves a throwaway service worker registered —
-					// in prod each build gets its own UUID subdomain, so they'd pile up forever.
+					// this, every app ever previewed leaves a service worker registered on its
+					// sandbox-<hash> subdomain. Another tab showing the same app is unaffected:
+					// an unregistered worker keeps serving the pages it controls until they're
+					// all gone, and that tab's own register() call revives the registration.
 					// This only fires on real teardown because the loader keeps itself alive and
 					// renders the entry in a nested iframe (below) instead of navigating away.
 					window.addEventListener('pagehide', () => { registration?.unregister(); });
@@ -109,7 +116,7 @@
 					frame.setAttribute('sandbox', CONTENT_SANDBOX);
 					document.body.appendChild(frame);
 				}
-				frame.src = src || '/' + pendingEntry + '?__preview=' + ++renderCount;
+				frame.src = src || '/' + pendingEntry + '?__preview=' + ++renderCount + '&__session=' + SESSION;
 			}
 
 			// ── Fallback rendering, for browsers that won't run the service worker ──
@@ -211,6 +218,7 @@
 				// Forward the file map to the SW for fetch interception.
 				navigator.serviceWorker.controller?.postMessage({
 					type: 'files',
+					session: SESSION,
 					files: event.data.files,
 				});
 			});

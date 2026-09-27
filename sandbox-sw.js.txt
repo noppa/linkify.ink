@@ -1,7 +1,19 @@
 // Service worker for sandbox-*.linkify.ink — serves files from in-memory map
 
-/** @type {Map<string, Uint8Array>} */
-const files = new Map();
+// A sandbox origin is named after the files it shows, so several tabs can have
+// loaders on the same origin, all controlled by this one worker — and one of them
+// may be an editor whose files have since been edited. Each loader therefore posts
+// its files under its own session id, and every request is answered from the
+// session of the document that made it.
+
+/** @type {Map<string, { loaderId: string, files: Map<string, Uint8Array> }>} */
+const sessions = new Map();
+/** Session of each client (document or worker) created inside a preview. */
+/** @type {Map<string, string>} */
+const sessionByClient = new Map();
+/** The session last posted, for requests that can't be traced to one. */
+/** @type {string | null} */
+let latestSession = null;
 
 self.addEventListener('install', () => {
 	// @ts-ignore
@@ -15,19 +27,69 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('message', (event) => {
 	if (!event.data || event.data.type !== 'files') return;
-	files.clear();
+	const { session } = event.data;
+	/** @type {Map<string, Uint8Array>} */
+	const files = new Map();
 	for (const [name, bytes] of Object.entries(event.data.files)) {
 		const normalized = '/' + String(name).replace(/^\//, '');
 		files.set(normalized, new Uint8Array(/** @type {any} */ (bytes)));
 	}
 	// @ts-ignore
+	sessions.set(session, { loaderId: event.source?.id ?? '', files });
+	latestSession = session;
+	// @ts-ignore
+	event.waitUntil(forgetClosedClients());
+	// @ts-ignore
 	event.source?.postMessage({ type: 'ready' });
 });
 
+/** Drop the sessions of loaders, and the entries of clients, that are gone. */
+async function forgetClosedClients() {
+	// @ts-ignore
+	const clients = await self.clients.matchAll({ includeUncontrolled: true, type: 'all' });
+	const open = new Set(clients.map((/** @type {{ id: string }} */ client) => client.id));
+	for (const [session, { loaderId }] of sessions) {
+		if (!open.has(loaderId) && session !== latestSession) sessions.delete(session);
+	}
+	for (const [clientId, session] of sessionByClient) {
+		if (!open.has(clientId) || !sessions.has(session)) sessionByClient.delete(clientId);
+	}
+}
+
+/**
+ * The session a request belongs to: the one its client was created in, else
+ * the one named in the loader's navigation of the content frame (?__session=),
+ * else the one of the document a navigation replaces. Anything else — a nested
+ * frame's navigation, say — falls back to the session last posted, which is
+ * the right one unless two tabs show different edits of the same app.
+ * @param {FetchEvent} event
+ * @param {URL} url
+ * @returns {string | null}
+ */
+function sessionFor(event, url) {
+	const session =
+		sessionByClient.get(event.clientId) ??
+		url.searchParams.get('__session') ??
+		// @ts-ignore — not in every browser (or in TypeScript's lib)
+		sessionByClient.get(event.replacesClientId ?? '') ??
+		latestSession;
+	if (session && event.resultingClientId) {
+		sessionByClient.set(event.resultingClientId, session);
+	}
+	return session;
+}
+
 self.addEventListener('fetch', (event) => {
-	const { pathname } = new URL(/** @type {FetchEvent} */ (event).request.url);
-	const path = pathname === '/' ? '/index.html' : pathname;
-	const data = files.get(path);
+	const fetchEvent = /** @type {FetchEvent} */ (event);
+	const url = new URL(fetchEvent.request.url);
+	// The loader itself, being loaded in a tab while another tab's loader keeps
+	// this worker alive. Let it through to the network: answering / from a file
+	// map would put the app where the loader should be.
+	if (url.pathname === '/' && url.searchParams.has('__loader')) return;
+
+	const session = sessionFor(fetchEvent, url);
+	const path = url.pathname === '/' ? '/index.html' : url.pathname;
+	const data = session ? sessions.get(session)?.files.get(path) : undefined;
 	if (data !== undefined) {
 		/** @type {Record<string, string>} */
 		const headers = {
@@ -38,7 +100,7 @@ self.addEventListener('fetch', (event) => {
 			// edits don't show up (the HTML document revalidates, subresources don't).
 			'Cache-Control': 'no-store',
 		};
-		/** @type {FetchEvent} */ (event).respondWith(new Response(data, { headers }));
+		fetchEvent.respondWith(new Response(data, { headers }));
 	}
 	// Unknown path — fall through (network will 404; SW handled what it knows)
 });

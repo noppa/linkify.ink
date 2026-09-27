@@ -16,7 +16,7 @@ export default {
 		const url = new URL(request.url);
 
 		// The route is *.linkify.ink/* (Cloudflare only allows a leading-label
-		// wildcard), so scope the sandbox to sandbox-<uuid> hosts here. Any other
+		// wildcard), so scope the sandbox to sandbox-<hash> hosts here. Any other
 		// subdomain 404s rather than rendering a sandbox loader.
 		if (!url.hostname.startsWith('sandbox-')) {
 			return new Response('Not found', { status: 404 });
