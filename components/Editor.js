@@ -69,6 +69,8 @@ function ImageViewer({ file, onReplace }) {
 	const [processing, setProcessing] = useState(false);
 	const [convertFailed, setConvertFailed] = useState(false);
 	const [dims, setDims] = useState(/** @type {{width: number, height: number} | null} */ (null));
+	// Current size relative to `original`, compounded across downscales.
+	const [scale, setScale] = useState(1);
 	// The pristine version of this image, kept only in local component state.
 	const [original, setOriginal] = useState(file);
 	// Tracks the FileEntry we most recently produced ourselves, so the effect
@@ -80,6 +82,7 @@ function ImageViewer({ file, onReplace }) {
 		if (file !== producedRef.current) {
 			setOriginal(file);
 			setDims(null);
+			setScale(1);
 			setConvertFailed(false);
 		}
 		producedRef.current = null;
@@ -118,7 +121,10 @@ function ImageViewer({ file, onReplace }) {
 		setProcessing(true);
 		try {
 			const result = await transformImage(file, { scale: DOWNSCALE_FACTOR });
-			if (result) apply(result);
+			if (result) {
+				apply(result);
+				setScale((s) => s * DOWNSCALE_FACTOR);
+			}
 		} finally {
 			setProcessing(false);
 		}
@@ -127,6 +133,7 @@ function ImageViewer({ file, onReplace }) {
 	function restoreOriginal() {
 		if (!onReplace || file === original) return;
 		apply(original);
+		setScale(1);
 	}
 
 	const canDownscale =
@@ -165,6 +172,12 @@ function ImageViewer({ file, onReplace }) {
 						>
 							${processing ? 'Working…' : 'Downscale'}
 						</button>
+						${scale < 1 &&
+						html`<span
+							class="editor-image-hint"
+							title=${`Downscaled to ${Math.round(scale * 100)}% of the original`}
+							>${Math.round(scale * 100)}%</span
+						>`}
 						<button
 							class="btn"
 							onClick=${restoreOriginal}
