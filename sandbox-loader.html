@@ -5,10 +5,8 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 		<title>sandbox</title>
 		<style>
-			/* overflow: a scaled-down content frame (see fitFrame) keeps its unscaled
-			   layout box, which would otherwise scroll this page sideways. */
-			html, body { margin: 0; height: 100%; background: #fff; overflow: hidden; }
-			iframe { border: 0; width: 100%; height: 100%; display: block; transform-origin: 0 0; }
+			html, body { margin: 0; height: 100%; background: #fff; }
+			iframe { border: 0; width: 100%; height: 100%; display: block; }
 		</style>
 	</head>
 	<body>
@@ -118,7 +116,6 @@
 					frame.setAttribute('sandbox', CONTENT_SANDBOX);
 					document.body.appendChild(frame);
 				}
-				fitFrame();
 				frame.src = src || '/' + pendingEntry + '?__preview=' + ++renderCount + '&__session=' + SESSION;
 			}
 
@@ -130,10 +127,16 @@
 			// phone showing it as a page lays it out that wide and scales it to fit.
 			// A viewport meta only applies to a top-level document, though — inside
 			// this frame it is ignored, and the capture would scroll sideways in a
-			// phone-width frame instead. So the frame does the same thing here: lay
-			// the content out at the declared width, then scale it down to fit.
+			// phone-width frame instead. So the frame does the same thing here, with
+			// `zoom` on the content's root: the frame's width in zoomed pixels is the
+			// declared width, and the page renders natively at the smaller size.
 			// Pinch-zooming the page zooms back in from there.
+			//
+			// Not a `transform: scale()` on the frame: that keeps a layer several
+			// times the screen's area, which pinch-zooming re-rasterizes at ever higher
+			// resolution until mobile Safari runs out of memory and reloads the tab.
 			let declaredWidth = 0;
+			const FIT_STYLE_ID = '__linkify-fit';
 
 			/** @param {Uint8Array | undefined} bytes */
 			function readDeclaredWidth(bytes) {
@@ -147,21 +150,51 @@
 				return match ? Number(match[1]) : 0;
 			}
 
-			function fitFrame() {
-				const frame = document.getElementById('content');
-				if (!frame) return;
+			function fitZoom() {
 				const available = document.documentElement.clientWidth;
-				if (!(declaredWidth > available)) {
-					frame.style.width = frame.style.height = frame.style.transform = '';
-					return;
-				}
-				const scale = available / declaredWidth;
-				frame.style.width = declaredWidth + 'px';
-				frame.style.height = document.documentElement.clientHeight / scale + 'px';
-				frame.style.transform = 'scale(' + scale + ')';
+				return declaredWidth > available ? available / declaredWidth : 1;
 			}
 
-			window.addEventListener('resize', fitFrame);
+			// text-size-adjust: iOS Safari inflates text that renders this small
+			// ("text autosizing"), but a capture's box heights and line heights are
+			// fixed pixels, so the inflated text wraps onto more lines than its box
+			// holds and the lines pile up on top of each other.
+			/** @param {number} zoom */
+			function fitCss(zoom) {
+				return zoom < 1
+					? 'html{zoom:' + zoom + ';-webkit-text-size-adjust:100%;text-size-adjust:100%}'
+					: '';
+			}
+
+			/**
+			 * The entry file with the fit already applied, so the first paint is
+			 * fitted rather than corrected after load. Returned unchanged when there
+			 * is nothing to fit, or no `</head>` to put the style before.
+			 * @param {Uint8Array} bytes
+			 */
+			function withFit(bytes) {
+				const css = fitCss(fitZoom());
+				if (!css) return bytes;
+				const source = new TextDecoder().decode(bytes);
+				const headEnd = source.search(/<\/head>/i);
+				if (headEnd === -1) return bytes;
+				const style = '<style id="' + FIT_STYLE_ID + '">' + css + '</style>';
+				return new TextEncoder().encode(source.slice(0, headEnd) + style + source.slice(headEnd));
+			}
+
+			// Rotating the phone, or resizing the editor's preview panel, changes the
+			// zoom that fits; update the document already on screen.
+			window.addEventListener('resize', () => {
+				const doc = /** @type {HTMLIFrameElement | null} */ (document.getElementById('content'))?.contentDocument;
+				if (!doc?.head || !declaredWidth) return;
+				let style = doc.getElementById(FIT_STYLE_ID);
+				if (!style) {
+					style = doc.createElement('style');
+					style.id = FIT_STYLE_ID;
+					doc.head.appendChild(style);
+				}
+				style.textContent = fitCss(fitZoom());
+			});
 
 			// ── Fallback rendering, for browsers that won't run the service worker ──
 
@@ -258,15 +291,18 @@
 				const entryName = normalizeName(pendingEntry);
 				const entryKey = Object.keys(event.data.files).find((name) => normalizeName(name) === entryName);
 				declaredWidth = entryKey ? readDeclaredWidth(event.data.files[entryKey]) : 0;
+				const files = entryKey
+					? { ...event.data.files, [entryKey]: withFit(event.data.files[entryKey]) }
+					: event.data.files;
 				if (!serviceWorkerReady) {
-					renderWithBlobUrls(event.data.files);
+					renderWithBlobUrls(files);
 					return;
 				}
 				// Forward the file map to the SW for fetch interception.
 				navigator.serviceWorker.controller?.postMessage({
 					type: 'files',
 					session: SESSION,
-					files: event.data.files,
+					files,
 				});
 			});
 
