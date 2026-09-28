@@ -152,7 +152,7 @@ export default function ShareModal({ files, onClose, onGenerated }) {
 							${encryption === 'ecdh' ? 'Encrypted payload' : 'Your link'}
 							${shareLen > 0
 								? html`<span class="modal-url-length"
-										>${shareLen.toLocaleString()} chars</span
+										> ${shareLen.toLocaleString()} chars</span
 									>`
 								: ''}
 						</label>
