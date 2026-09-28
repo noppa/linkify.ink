@@ -60,6 +60,15 @@ export default function AboutPage() {
 				code from a link never runs on the main site.
 			</p>
 			<p>
+				The source code is available on${' '}
+				<a
+					href="https://github.com/noppa/linkify.ink"
+					style="color:var(--accent)"
+					target="_blank"
+					rel="noopener noreferrer"
+				>GitHub</a>.
+			</p>
+			<p>
 				<a href="/" style="color:var(--accent)">← Back to editor</a>
 			</p>
 		</div>

@@ -97,6 +97,6 @@ MIT, see [LICENSE](LICENSE).
 
 ## AI disclosure
 
-This project was built with heavy use of AI tools, mostly Claude and some Codex/ChatGPT.
-You could even say it was "vibe coded", as I haven't actually read all of the code.
+This project was built with heavy use of AI tools, mostly Claude.  
+You could even say it was "vibe coded", as I haven't actually read all of the code.  
 Take that as you will.
