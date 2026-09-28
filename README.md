@@ -94,3 +94,9 @@ Before the first `npm test`, install the browser with `npx playwright install ch
 ## License
 
 MIT, see [LICENSE](LICENSE).
+
+## AI disclosure
+
+This project was built with heavy use of AI tools, mostly Claude and some Codex/ChatGPT.
+You could even say it was "vibe coded", as I haven't actually read all of the code.
+Take that as you will.
