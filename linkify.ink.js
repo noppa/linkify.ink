@@ -6,10 +6,10 @@
 // fetch) is used directly; the two things it can't — zstd compression and Argon2id
 // key derivation — are supplied by the caller through the constructor.
 //
-// The caller is responsible for importing the vendor bundle (vendor.codec.bundle.js)
+// The caller is responsible for importing the vendor bundle (vendor/vendor.codec.bundle.js)
 // and this file, then constructing an instance with the vendored libraries:
 //
-//   import { linkifyInkCodecDependencies } from './vendor.codec.bundle.js';
+//   import { linkifyInkCodecDependencies } from './vendor/vendor.codec.bundle.js';
 //   import { LinkifyInk } from './linkify.ink.js';
 //
 //   const linkify = new LinkifyInk(linkifyInkCodecDependencies);

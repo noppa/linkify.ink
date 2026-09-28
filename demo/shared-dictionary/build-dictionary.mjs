@@ -368,7 +368,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 		if (existsSync(target)) throw new Error(`${target} exists; a published dictionary is never replaced`);
 		// zstd would read the frame magic as a formatted dictionary, not raw content
 		if (dictionary.readUInt32LE(0) === 0xec30a437) throw new Error('dictionary starts with the zstd dictionary magic');
-		const { linkifyInkCodecDependencies } = await import('../../vendor.codec.bundle.js');
+		const { linkifyInkCodecDependencies } = await import('../../vendor/vendor.codec.bundle.js');
 		const { zstd, zstdWasmUrl } = linkifyInkCodecDependencies;
 		await zstd.init(zstdWasmUrl);
 		const compressed = zstd.compress(dictionary, 22);

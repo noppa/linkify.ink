@@ -11,7 +11,7 @@ which dictionary a link needs.
 | 2 | `v2.dict.zst` | 3,489,101 bytes | `84b92dfee4d5a8b1a41878e9a3c5dc470424d729c78ac47a1778c1e04a2cba80` |
 
 The files here are the dictionaries compressed with zstd, which the app already
-has to decompress them. `vendor.codec.js` imports each one as a data URL
+has to decompress them. `vendor/vendor.codec.js` imports each one as a data URL
 (`--loader:.zst=dataurl`), so the codec bundle carries it and works offline, in
 the extension and in Node without fetching anything.
 
@@ -38,7 +38,7 @@ A better dictionary is a new format version:
 1. Build it (see [`demo/shared-dictionary/`](../demo/shared-dictionary/README.md))
    and freeze it with `node demo/shared-dictionary/build-dictionary.mjs --write
    dictionaries/v3.dict.zst`, which refuses to overwrite an existing file.
-2. Import it in `vendor.codec.js` as `zstdDictionaryUrls[3]`, keeping every
+2. Import it in `vendor/vendor.codec.js` as `zstdDictionaryUrls[3]`, keeping every
    older entry, and rebuild the bundle (`npm run bundle-libs-codec`).
 3. Bump `FORMAT_VERSION` in `linkify.ink.js` and add the version to the list above
    it. Readers keep reading every older version.

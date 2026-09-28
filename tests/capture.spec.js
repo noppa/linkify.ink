@@ -113,7 +113,7 @@ test('full-page capture reproduces the rendered page', async ({ page }) => {
 	const live = await measure(page, PROBES);
 
 	// Same injection order as the service worker's CAPTURE_FILES.
-	await page.addScriptTag({ path: path.join(root, 'vendor.readability.bundle.js') });
+	await page.addScriptTag({ path: path.join(root, 'vendor', 'vendor.readability.bundle.js') });
 	await page.addScriptTag({ path: path.join(root, 'extension', 'content', 'capture.js') });
 	const capture = await page.evaluate(() =>
 		globalThis.__linkifyInkCapture({ mode: 'full' }),

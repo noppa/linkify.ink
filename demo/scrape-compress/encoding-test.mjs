@@ -26,7 +26,7 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
 import sharp from 'sharp';
 import { FIXTURES, PROSE, renderFixture } from './fixtures/index.mjs';
-import { linkifyInkCodecDependencies } from '../../vendor.codec.bundle.js';
+import { linkifyInkCodecDependencies } from '../../vendor/vendor.codec.bundle.js';
 import { LinkifyInk } from '../../linkify.ink.js';
 
 const here = dirname(fileURLToPath(import.meta.url));

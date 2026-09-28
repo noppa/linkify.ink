@@ -1,4 +1,4 @@
 libraries.bundle.js
 libraries-for-preview.bundle.js
-vendor.codec.bundle.js
-vendor.readability.bundle.js
+vendor/vendor.codec.bundle.js
+vendor/vendor.readability.bundle.js

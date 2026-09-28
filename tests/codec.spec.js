@@ -49,7 +49,7 @@ test.describe('shared dictionary', () => {
 		page,
 	}) => {
 		const result = await page.evaluate(async () => {
-			const { linkifyInkCodecDependencies } = await import('/vendor.codec.bundle.js');
+			const { linkifyInkCodecDependencies } = await import('/vendor/vendor.codec.bundle.js');
 			const { LinkifyInk } = await import('/linkify.ink.js');
 			const linkify = new LinkifyInk(linkifyInkCodecDependencies);
 			const withoutDictionary = new LinkifyInk({
@@ -116,7 +116,7 @@ test.describe('shared dictionary', () => {
 		// Every format-2 link depends on these exact bytes. If this fails, the
 		// dictionary was rebuilt in place: restore it and publish a new version.
 		const digest = await page.evaluate(async () => {
-			const { linkifyInkCodecDependencies } = await import('/vendor.codec.bundle.js');
+			const { linkifyInkCodecDependencies } = await import('/vendor/vendor.codec.bundle.js');
 			const { zstd, zstdWasmUrl, zstdDictionaryUrls } = linkifyInkCodecDependencies;
 			await zstd.init(zstdWasmUrl);
 			const response = await fetch(zstdDictionaryUrls[2]);

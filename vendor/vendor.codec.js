@@ -14,16 +14,16 @@
 // Must stay the first import: it patches the environment the vendor modules read
 // as they evaluate. See vendor.codec.shim.js.
 import './vendor.codec.shim.js';
-import * as ZstdWasm from './node_modules/@bokuweb/zstd-wasm/dist/esm/index.web';
+import * as ZstdWasm from '../node_modules/@bokuweb/zstd-wasm/dist/esm/index.web';
 // @ts-ignore
-import zstdWasmBase64DataUrl from './node_modules/@bokuweb/zstd-wasm/dist/web/zstd.wasm';
+import zstdWasmBase64DataUrl from '../node_modules/@bokuweb/zstd-wasm/dist/web/zstd.wasm';
 import * as Argon2 from 'argon2-browser';
 // @ts-ignore
-import argon2WasmBase64DataUrl from './node_modules/argon2-browser/dist/argon2.wasm';
+import argon2WasmBase64DataUrl from '../node_modules/argon2-browser/dist/argon2.wasm';
 // The shared zstd dictionary links are compressed with, keyed by the link format
 // version that uses it. Committed and frozen: see dictionaries/README.md.
 // @ts-ignore
-import zstdDictionaryV2DataUrl from './dictionaries/v2.dict.zst';
+import zstdDictionaryV2DataUrl from '../dictionaries/v2.dict.zst';
 
 export { ZstdWasm, zstdWasmBase64DataUrl, Argon2, argon2WasmBase64DataUrl };
 

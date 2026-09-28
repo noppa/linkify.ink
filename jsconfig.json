@@ -13,7 +13,7 @@
 	},
 	"include": [
 		"linkify.ink.js",
-		"vendor.readability.bundle.d.ts",
+		"vendor/vendor.readability.bundle.d.ts",
 		"lib/**/*.js",
 		"lib/**/*.mjs",
 		"components/**/*.js",
@@ -23,8 +23,8 @@
 	],
 	"exclude": [
 		"libraries.bundle.js",
-		"vendor.codec.bundle.js",
-		"vendor.readability.bundle.js",
+		"vendor/vendor.codec.bundle.js",
+		"vendor/vendor.readability.bundle.js",
 		"extension/vendor",
 		"node_modules",
 		"vendors"

@@ -18,7 +18,7 @@ import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync } from 
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { marked } from 'marked';
-import { linkifyInkCodecDependencies } from '../../vendor.codec.bundle.js';
+import { linkifyInkCodecDependencies } from '../../vendor/vendor.codec.bundle.js';
 import { LinkifyInk } from '../../linkify.ink.js';
 import { buildSections, joinSections, readLanguages, readTrained, truncateDictionary } from './build-dictionary.mjs';
 

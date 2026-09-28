@@ -26,7 +26,7 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
 import sharp from 'sharp';
 import { FIXTURES, makeFixtures, renderFixture } from './fixtures/index.mjs';
-import { linkifyInkCodecDependencies } from '../../vendor.codec.bundle.js';
+import { linkifyInkCodecDependencies } from '../../vendor/vendor.codec.bundle.js';
 import { LinkifyInk } from '../../linkify.ink.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -203,7 +203,7 @@ async function main() {
 	});
 
 	const captureSource = await readFile(join(here, 'capture.js'), 'utf8');
-	const readabilitySource = await readFile(join(repo, 'vendor.readability.bundle.js'), 'utf8');
+	const readabilitySource = await readFile(join(repo, 'vendor', 'vendor.readability.bundle.js'), 'utf8');
 	const extensionSource = await readFile(join(repo, 'extension', 'content', 'capture.js'), 'utf8');
 
 	/** @type {object[]} */

@@ -2097,7 +2097,7 @@ var LinkifyReadability = (() => {
     }
   });
 
-  // vendor.readability.js
+  // vendor/vendor.readability.js
   var vendor_readability_exports = {};
   __export(vendor_readability_exports, {
     Readability: () => import_readability.Readability,

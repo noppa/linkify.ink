@@ -18,7 +18,7 @@ const entries = [
 	'favicon.ico',
 	'libraries.bundle.js',
 	'libraries-for-preview.bundle.js',
-	'vendor.codec.bundle.js',
+	'vendor/vendor.codec.bundle.js',
 	'linkify.ink.js',
 	'assets',
 	'components',
@@ -31,6 +31,7 @@ await fs.mkdir(dist, { recursive: true });
 for (const entry of entries) {
 	const from = path.join(root, entry);
 	const to = path.join(dist, entry);
+	await fs.mkdir(path.dirname(to), { recursive: true });
 	await fs.cp(from, to, { recursive: true });
 }
 
