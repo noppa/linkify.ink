@@ -67,7 +67,7 @@ export default function Editor({ file, onChange, onReplace }) {
 function ImageViewer({ file, onReplace }) {
 	const [blobUrl, setBlobUrl] = useState('');
 	const [processing, setProcessing] = useState(false);
-	const [avifSupported, setAvifSupported] = useState(false);
+	const [convertFailed, setConvertFailed] = useState(false);
 	const [dims, setDims] = useState(/** @type {{width: number, height: number} | null} */ (null));
 	// The pristine version of this image, kept only in local component state.
 	const [original, setOriginal] = useState(file);
@@ -77,17 +77,10 @@ function ImageViewer({ file, onReplace }) {
 	const producedRef = useRef(/** @type {FileEntry | null} */ (null));
 
 	useEffect(() => {
-		// Feature-detect AVIF encoding support
-		const canvas = document.createElement('canvas');
-		canvas.width = 1;
-		canvas.height = 1;
-		canvas.toBlob((blob) => setAvifSupported(!!blob), 'image/avif');
-	}, []);
-
-	useEffect(() => {
 		if (file !== producedRef.current) {
 			setOriginal(file);
 			setDims(null);
+			setConvertFailed(false);
 		}
 		producedRef.current = null;
 	}, [file]);
@@ -106,13 +99,15 @@ function ImageViewer({ file, onReplace }) {
 		if (onReplace) onReplace(newFile);
 	}
 
-	/** @param {string} format */
-	async function convert(format) {
+	async function convertToWebp() {
 		if (!onReplace) return;
 		setProcessing(true);
 		try {
-			const result = await transformImage(file, { format });
-			if (result) apply(result);
+			const result = await transformImage(file, { format: 'image/webp' });
+			// Browsers that can't encode WebP (older Safari) silently return a
+			// PNG, which is lossless and usually larger; discard it.
+			if (result?.type === 'image/webp') apply(result);
+			else if (result) setConvertFailed(true);
 		} finally {
 			setProcessing(false);
 		}
@@ -138,13 +133,11 @@ function ImageViewer({ file, onReplace }) {
 		!dims || Math.min(dims.width, dims.height) * DOWNSCALE_FACTOR > MIN_DIMENSION;
 	const canRestore = file !== original;
 	// Uploads without a MIME type are stored as application/octet-stream; use the
-	// filename in that case so a .webp/.avif still hides its own conversion action.
+	// filename in that case so a .webp still hides its own conversion action.
 	const sourceType = file.type.startsWith('image/')
 		? file.type
 		: guessType(file.name, 'image/png');
 	const canConvertToWebp = sourceType !== 'image/webp';
-	const canConvertToAvif = avifSupported && sourceType !== 'image/avif';
-	const hasFormatConversion = canConvertToWebp || canConvertToAvif;
 
 	return html`
 		<div class="panel editor-panel">
@@ -180,27 +173,18 @@ function ImageViewer({ file, onReplace }) {
 						>
 							Restore original
 						</button>
-						${hasFormatConversion &&
+						${canConvertToWebp &&
 						html`
-							<span class="editor-image-hint"
-								>Lossy recompression (renames file):</span
+							<button
+								class="btn"
+								onClick=${convertToWebp}
+								disabled=${processing || convertFailed}
+								title=${convertFailed
+									? "This browser can't encode WebP images"
+									: undefined}
 							>
-							${canConvertToWebp &&
-								html`<button
-									class="btn"
-									onClick=${() => convert('image/webp')}
-									disabled=${processing}
-								>
-									Convert to WebP
-								</button>`}
-							${canConvertToAvif &&
-								html`<button
-									class="btn"
-									onClick=${() => convert('image/avif')}
-									disabled=${processing}
-								>
-									Convert to AVIF
-								</button>`}
+								Convert to WebP
+							</button>
 						`}
 					</div>
 				`}
