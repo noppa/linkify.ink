@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from '../libraries.bundle.js';
 import { htm } from '../libraries.bundle.js';
 import FileList from './FileList.js';
 import Editor from './Editor.js';
-import Preview, { resolvePreviewFile } from './Preview.js';
+import Preview, { isHtmlFile } from './Preview.js';
 import ShareModal from './ShareModal.js';
 import Icon from '../lib/icons.js';
 import { linkify, LinkifyInk } from '../lib/linkify.js';
@@ -28,12 +28,11 @@ function isDefaultReadmeOnly(files) {
 
 /**
  * The file a shared link opens on: its HTML page when it has one, else the
- * first file — what the preview would pick for the first file.
+ * first file.
  * @param {FileEntry[]} files
  */
 function openingIndex(files) {
-	const file = resolvePreviewFile(files, files[0] ?? null);
-	return Math.max(0, files.indexOf(/** @type {FileEntry} */ (file)));
+	return Math.max(0, files.findIndex(isHtmlFile));
 }
 
 export default function EditorPage() {

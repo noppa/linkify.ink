@@ -44,9 +44,19 @@ function loadPreviewLibs() {
  */
 
 /** @param {FileEntry} file @returns {boolean} */
-function isHtmlFile(file) {
+export function isHtmlFile(file) {
 	const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
 	return ext === 'html' || ext === 'htm';
+}
+
+/**
+ * Whether `file` is a stylesheet or script — something an HTML page pulls in,
+ * whose own preview matters less than the page it styles or drives.
+ * @param {FileEntry} file @returns {boolean}
+ */
+function isPageAsset(file) {
+	const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+	return ['css', 'js', 'mjs', 'cjs'].includes(ext);
 }
 
 const HOSTED_ORIGIN = 'linkify.ink';
@@ -79,17 +89,17 @@ const HIGHLIGHT_LANGUAGE_BY_EXTENSION = {
 };
 
 /**
- * Which file the preview shows. When a non-HTML file is open but the project
- * has HTML, keep showing the last-opened HTML file (or the first HTML file if
- * none was opened yet), so the rendered page doesn't disappear when you open
- * its stylesheet or script. Otherwise just follow the active file.
+ * Which file the preview shows. When a stylesheet or script is open but the
+ * project has HTML, keep showing the last-opened HTML file (or the first HTML
+ * file if none was opened yet), so the rendered page doesn't disappear when you
+ * edit what it loads. Any other file — markdown, images, etc. — previews itself.
  * @param {FileEntry[]} files
  * @param {FileEntry | null} activeFile
  * @param {string | null} [lastHtmlName]
  * @returns {FileEntry | null}
  */
 export function resolvePreviewFile(files, activeFile, lastHtmlName = null) {
-	if (!activeFile || isHtmlFile(activeFile)) return activeFile;
+	if (!activeFile || !isPageAsset(activeFile)) return activeFile;
 	return (
 		files.find((f) => f.name === lastHtmlName) ??
 		files.find(isHtmlFile) ??
