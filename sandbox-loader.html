@@ -5,10 +5,8 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 		<title>sandbox</title>
 		<style>
-			/* overflow: a scaled-down content frame (see fitFrame) keeps its unscaled
-			   layout box, which would otherwise scroll this page sideways. */
-			html, body { margin: 0; height: 100%; background: #fff; overflow: hidden; }
-			iframe { border: 0; width: 100%; height: 100%; display: block; transform-origin: 0 0; }
+			html, body { margin: 0; height: 100%; background: #fff; }
+			iframe { border: 0; width: 100%; height: 100%; display: block; }
 		</style>
 	</head>
 	<body>
@@ -118,50 +116,8 @@
 					frame.setAttribute('sandbox', CONTENT_SANDBOX);
 					document.body.appendChild(frame);
 				}
-				fitFrame();
 				frame.src = src || '/' + pendingEntry + '?__preview=' + ++renderCount + '&__session=' + SESSION;
 			}
-
-			// ── Declared layout width ──
-
-			// The width the entry document asks to be laid out at, from a numeric
-			// `<meta name="viewport" content="width=…">`; 0 when it declares none. A
-			// full-page capture declares the desktop width it was taken at, and a
-			// phone showing it as a page lays it out that wide and scales it to fit.
-			// A viewport meta only applies to a top-level document, though — inside
-			// this frame it is ignored, and the capture would scroll sideways in a
-			// phone-width frame instead. So the frame does the same thing here: lay
-			// the content out at the declared width, then scale it down to fit.
-			// Pinch-zooming the page zooms back in from there.
-			let declaredWidth = 0;
-
-			/** @param {Uint8Array | undefined} bytes */
-			function readDeclaredWidth(bytes) {
-				if (!bytes) return 0;
-				const source = new TextDecoder().decode(bytes);
-				const bodyStart = source.search(/<body[\s>]/i);
-				const head = bodyStart === -1 ? source : source.slice(0, bodyStart);
-				const doc = new DOMParser().parseFromString(head, 'text/html');
-				const content = doc.querySelector('meta[name="viewport" i]')?.getAttribute('content') ?? '';
-				const match = /(?:^|[,;\s])width\s*=\s*(\d+(?:\.\d+)?)/i.exec(content);
-				return match ? Number(match[1]) : 0;
-			}
-
-			function fitFrame() {
-				const frame = document.getElementById('content');
-				if (!frame) return;
-				const available = document.documentElement.clientWidth;
-				if (!(declaredWidth > available)) {
-					frame.style.width = frame.style.height = frame.style.transform = '';
-					return;
-				}
-				const scale = available / declaredWidth;
-				frame.style.width = declaredWidth + 'px';
-				frame.style.height = document.documentElement.clientHeight / scale + 'px';
-				frame.style.transform = 'scale(' + scale + ')';
-			}
-
-			window.addEventListener('resize', fitFrame);
 
 			// ── Fallback rendering, for browsers that won't run the service worker ──
 
@@ -255,9 +211,6 @@
 				if (event.origin !== PARENT_ORIGIN) return;
 				if (!event.data || event.data.type !== 'files') return;
 				pendingEntry = event.data.entry || 'index.html';
-				const entryName = normalizeName(pendingEntry);
-				const entryKey = Object.keys(event.data.files).find((name) => normalizeName(name) === entryName);
-				declaredWidth = entryKey ? readDeclaredWidth(event.data.files[entryKey]) : 0;
 				if (!serviceWorkerReady) {
 					renderWithBlobUrls(event.data.files);
 					return;
