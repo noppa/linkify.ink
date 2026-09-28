@@ -99,8 +99,8 @@ export default function ShareModal({ files, onClose, onGenerated }) {
 						}}
 					>
 						<option value="none">None (public link)</option>
-						<option value="password">Password (Argon2id + AES-GCM)</option>
-						<option value="ecdh">Recipient public key (ECDH)</option>
+						<option value="password">Password</option>
+						<option value="ecdh">Recipient public key</option>
 					</select>
 				</div>
 
