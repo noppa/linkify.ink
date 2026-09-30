@@ -5,7 +5,7 @@
 // This bundle is only ever loaded by the extension's content script, where a real
 // document exists — Readability walks and mutates a DOM, so unlike the codec it
 // cannot run in a worker or in Node without one. It is deliberately kept out of
-// both libraries.bundle.js and vendor.codec.bundle.js so neither the site nor a
+// both vendor.ui.bundle.js and vendor.codec.bundle.js so neither the site nor a
 // link-reading script pays for an extractor they never call.
 //
 // `isProbablyReaderable` is the cheap pre-check: it estimates whether a page has

@@ -1,6 +1,6 @@
-import { h } from '../libraries.bundle.js';
-import { useState, useEffect, useRef } from '../libraries.bundle.js';
-import { htm } from '../libraries.bundle.js';
+import { h } from '../vendor/vendor.ui.bundle.js';
+import { useState, useEffect, useRef } from '../vendor/vendor.ui.bundle.js';
+import { htm } from '../vendor/vendor.ui.bundle.js';
 import FileList from './FileList.js';
 import Editor from './Editor.js';
 import Preview, { isHtmlFile } from './Preview.js';

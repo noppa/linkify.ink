@@ -1,6 +1,6 @@
-import { h } from '../libraries.bundle.js';
-import { useRef, useState } from '../libraries.bundle.js';
-import { htm } from '../libraries.bundle.js';
+import { h } from '../vendor/vendor.ui.bundle.js';
+import { useRef, useState } from '../vendor/vendor.ui.bundle.js';
+import { htm } from '../vendor/vendor.ui.bundle.js';
 import Icon from '../lib/icons.js';
 import { guessType, iconForFile } from '../lib/filetypes.js';
 import { STARTERS } from '../lib/starters.js';

@@ -1,6 +1,6 @@
 // Vendored dependencies for the linkify.ink codec (compression + crypto). Bundled
 // into vendor.codec.bundle.js. This is the only vendor bundle the lib
-// (linkify.ink.js) needs — the UI's rendering deps live in libraries.bundle.js.
+// (linkify.ink.js) needs — the UI's rendering deps live in vendor.ui.bundle.js.
 // Anything that only wants to create/read links (an AI agent, a CLI tool) imports
 // this bundle plus linkify.ink.js and needs nothing else:
 //
