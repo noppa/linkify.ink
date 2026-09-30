@@ -83,20 +83,19 @@ import { LinkifyInk } from './linkify.ink.mjs';
 const linkify = new LinkifyInk(linkifyInkCodecDependencies);
 
 // Encode: files are { name, data } with data as a Uint8Array.
-const link = await linkify.createLink(
-	[{ name: 'notes.md', data: new TextEncoder().encode('# hello') }],
-	{ encryption: 'password', password: 'hunter2' }, // optional
-);
+const link = await linkify.createLink([
+	{ name: 'notes.md', data: new TextEncoder().encode('# hello') },
+]);
 console.log(link); // https://linkify.ink/#...
 
 // Decode: pass the whole URL or just the fragment.
-const { files } = await linkify.readLink(link, { password: 'hunter2' });
+const { files } = await linkify.readLink(link);
 for (const f of files) {
 	console.log(f.name, new TextDecoder().decode(f.data));
 }
 ```
 
-To find out what a link needs before decoding it, call `linkify.peekEncryptionType(link)`. It returns `LinkifyInk.ENC_NONE`, `ENC_PASSWORD` (pass `{ password }`) or `ENC_ECDH` (pass `{ privateKey }`, the recipient's key).
+To password-protect a link, pass `{ encryption: 'password', password }` as the second argument to `createLink`, and `{ password }` to `readLink`. To find out what a link needs before decoding it, call `linkify.peekEncryptionType(link)`. It returns `LinkifyInk.ENC_NONE`, `ENC_PASSWORD` (pass `{ password }`) or `ENC_ECDH` (pass `{ privateKey }`, the recipient's key).
 
 ## Design goals
 
