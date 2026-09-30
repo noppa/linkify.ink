@@ -54,7 +54,7 @@ for (const name of ['react-19.md', 'rustbook-ch04.md']) {
 }
 // This repo's own files. Nothing in the dictionary comes from them either.
 for (const path of ['index.html', 'sandbox-loader.html', 'styles.css', 'app.js',
-	'components/EditorPage.js', 'README.md', 'linkify-ink-plan.md'])
+	'components/EditorPage.js', 'README.md'])
 	add(path, new Uint8Array(readFileSync(join(root, path))));
 
 // ── Dictionaries ─────────────────────────────────────────────────────────────
