@@ -54,6 +54,49 @@ All encoding, encryption and decoding runs client-side using web platform primit
 
 The only server-side code is a small Cloudflare Worker for the preview sandbox (below). It serves the sandbox loader page and its service worker script; it never receives file contents, which the editor posts to the sandbox frame in the browser.
 
+## Using the library
+
+The codec that creates and reads links works without the UI and has no other dependencies. It's two plain ES modules: `linkify.ink.js` and `vendor/vendor.codec.bundle.js`. They run in any JS runtime with WebCrypto and `fetch()`, such as Node 20+, Deno or Bun, so a script or a command-line agent can create and read links without a browser. You can get the files:
+
+- **from linkify.ink:**
+
+  ```sh
+  curl -s -o linkify.ink.mjs         https://linkify.ink/linkify.ink.js
+  curl -s -o vendor.codec.bundle.mjs https://linkify.ink/vendor/vendor.codec.bundle.js
+  ```
+
+- **from GitHub:**
+
+  ```sh
+  curl -s -o linkify.ink.mjs         https://raw.githubusercontent.com/noppa/linkify.ink/main/linkify.ink.js
+  curl -s -o vendor.codec.bundle.mjs https://raw.githubusercontent.com/noppa/linkify.ink/main/vendor/vendor.codec.bundle.js
+  ```
+
+- **by cloning this repository:** both files are committed, so no build step is needed.
+
+(Renaming them to `.mjs` just tells Node they're ES modules.)
+
+```js
+import { linkifyInkCodecDependencies } from './vendor.codec.bundle.mjs';
+import { LinkifyInk } from './linkify.ink.mjs';
+
+const linkify = new LinkifyInk(linkifyInkCodecDependencies);
+
+// Encode: files are { name, data } with data as a Uint8Array.
+const link = await linkify.createLink([
+	{ name: 'notes.md', data: new TextEncoder().encode('# hello') },
+]);
+console.log(link); // https://linkify.ink/#...
+
+// Decode: pass the whole URL or just the fragment.
+const { files } = await linkify.readLink(link);
+for (const f of files) {
+	console.log(f.name, new TextDecoder().decode(f.data));
+}
+```
+
+To password-protect a link, pass `{ encryption: 'password', password }` as the second argument to `createLink`, and `{ password }` to `readLink`. To find out what a link needs before decoding it, call `linkify.peekEncryptionType(link)`. It returns `LinkifyInk.ENC_NONE`, `ENC_PASSWORD` (pass `{ password }`) or `ENC_ECDH` (pass `{ privateKey }`, the recipient's key).
+
 ## Design goals
 
 - **No server-side state.** The hash fragment never leaves the browser, so the service has nothing to store, leak, or take down. A shared link works as long as the static site is up, and the decoding logic is simple enough to reimplement if it isn't.
