@@ -1,6 +1,6 @@
-import { h } from '../libraries.bundle.js';
-import { useEffect, useRef, useState } from '../libraries.bundle.js';
-import { htm } from '../libraries.bundle.js';
+import { h } from '../vendor/vendor.ui.bundle.js';
+import { useEffect, useRef, useState } from '../vendor/vendor.ui.bundle.js';
+import { htm } from '../vendor/vendor.ui.bundle.js';
 import Icon from '../lib/icons.js';
 import { isCodeFile } from '../lib/filetypes.js';
 
@@ -10,12 +10,12 @@ const html = htm.bind(h);
  * Lazily load the preview-only library bundle (Markdown, syntax highlighting,
  * and diagrams). Kept out of the main bundle so the editor's critical path stays
  * small; the import is cached so it only fetches once.
- * @type {Promise<typeof import('../libraries-for-preview.bundle.js')> | null}
+ * @type {Promise<typeof import('../vendor/vendor.preview.bundle.js')> | null}
  */
 let previewLibsPromise = null;
 function loadPreviewLibs() {
 	if (!previewLibsPromise) {
-		previewLibsPromise = import('../libraries-for-preview.bundle.js');
+		previewLibsPromise = import('../vendor/vendor.preview.bundle.js');
 	}
 	return previewLibsPromise;
 }

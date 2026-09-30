@@ -1,6 +1,6 @@
-import { h } from '../libraries.bundle.js';
-import { useEffect, useRef } from '../libraries.bundle.js';
-import { htm } from '../libraries.bundle.js';
+import { h } from '../vendor/vendor.ui.bundle.js';
+import { useEffect, useRef } from '../vendor/vendor.ui.bundle.js';
+import { htm } from '../vendor/vendor.ui.bundle.js';
 
 const html = htm.bind(h);
 

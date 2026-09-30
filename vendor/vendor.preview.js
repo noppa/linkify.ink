@@ -1,6 +1,6 @@
 // Libraries used only by the preview panel (not on the critical path for
 // encoding/decoding a URL or rendering the editor UI). Bundled separately and
-// lazy-loaded so they stay out of the main libraries.bundle.js.
+// lazy-loaded so they stay out of the main vendor.ui.bundle.js.
 import { marked, Renderer } from 'marked';
 import hljs from 'highlight.js/lib/common';
 import mermaid from 'mermaid';

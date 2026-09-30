@@ -1,6 +1,6 @@
-import { h, Fragment } from '../libraries.bundle.js';
-import { useState } from '../libraries.bundle.js';
-import { htm } from '../libraries.bundle.js';
+import { h, Fragment } from '../vendor/vendor.ui.bundle.js';
+import { useState } from '../vendor/vendor.ui.bundle.js';
+import { htm } from '../vendor/vendor.ui.bundle.js';
 import Icon from '../lib/icons.js';
 import { linkify, LinkifyInk } from '../lib/linkify.js';
 

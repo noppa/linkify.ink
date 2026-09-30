@@ -1,4 +1,4 @@
-libraries.bundle.js
-libraries-for-preview.bundle.js
+vendor/vendor.ui.bundle.js
+vendor/vendor.preview.bundle.js
 vendor/vendor.codec.bundle.js
 vendor/vendor.readability.bundle.js

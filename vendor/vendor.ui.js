@@ -1,4 +1,4 @@
-// Vendored UI dependencies (Preact + htm), bundled into libraries.bundle.js and
+// Vendored UI dependencies (Preact + htm), bundled into vendor.ui.bundle.js and
 // used by the editor UI. The codec's own vendored deps (zstd, argon2) live in the
 // separate vendor.codec.bundle.js so tools that only create/read links don't have
 // to pull in a rendering library.

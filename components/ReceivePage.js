@@ -1,6 +1,6 @@
-import { h } from '../libraries.bundle.js';
-import { useState, useEffect } from '../libraries.bundle.js';
-import { htm } from '../libraries.bundle.js';
+import { h } from '../vendor/vendor.ui.bundle.js';
+import { useState, useEffect } from '../vendor/vendor.ui.bundle.js';
+import { htm } from '../vendor/vendor.ui.bundle.js';
 import Icon from '../lib/icons.js';
 import { linkify, LinkifyInk } from '../lib/linkify.js';
 import { guessType } from '../lib/filetypes.js';

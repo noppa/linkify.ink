@@ -1,6 +1,6 @@
-import { h, render } from './libraries.bundle.js';
-import { useState, useEffect } from './libraries.bundle.js';
-import { htm } from './libraries.bundle.js';
+import { h, render } from './vendor/vendor.ui.bundle.js';
+import { useState, useEffect } from './vendor/vendor.ui.bundle.js';
+import { htm } from './vendor/vendor.ui.bundle.js';
 import EditorPage from './components/EditorPage.js';
 import ReceivePage from './components/ReceivePage.js';
 import AboutPage from './components/AboutPage.js';
