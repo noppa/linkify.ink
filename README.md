@@ -56,16 +56,23 @@ The only server-side code is a small Cloudflare Worker for the preview sandbox (
 
 ## Using the library
 
-The codec that creates and reads links works without the UI and has no other dependencies. It's two plain ES modules: `linkify.ink.js` and `vendor/vendor.codec.bundle.js`. They run in any JS runtime with WebCrypto and `fetch()`, so Node 20+, Deno, Bun, or a browser. You can get them:
+The codec that creates and reads links works without the UI and has no other dependencies. It's two plain ES modules: `linkify.ink.js` and `vendor/vendor.codec.bundle.js`. They run in any JS runtime with WebCrypto and `fetch()`, such as Node 20+, Deno or Bun, so a script or a command-line agent can create and read links without a browser. You can get the files:
 
-- **from linkify.ink:** `https://linkify.ink/linkify.ink.js` and `https://linkify.ink/vendor/vendor.codec.bundle.js`
-- **by cloning this repository:** both files are committed, so no build step is needed
-- **from GitHub through a CDN:** RawGit itself has shut down, but its successor [raw.githack.com](https://raw.githack.com/) and jsDelivr serve the same files with the right content type, e.g. `https://cdn.jsdelivr.net/gh/noppa/linkify.ink@main/linkify.ink.js`
+- **from linkify.ink:**
 
-```sh
-curl -s -o linkify.ink.mjs         https://linkify.ink/linkify.ink.js
-curl -s -o vendor.codec.bundle.mjs https://linkify.ink/vendor/vendor.codec.bundle.js
-```
+  ```sh
+  curl -s -o linkify.ink.mjs         https://linkify.ink/linkify.ink.js
+  curl -s -o vendor.codec.bundle.mjs https://linkify.ink/vendor/vendor.codec.bundle.js
+  ```
+
+- **from GitHub:**
+
+  ```sh
+  curl -s -o linkify.ink.mjs         https://raw.githubusercontent.com/noppa/linkify.ink/main/linkify.ink.js
+  curl -s -o vendor.codec.bundle.mjs https://raw.githubusercontent.com/noppa/linkify.ink/main/vendor/vendor.codec.bundle.js
+  ```
+
+- **by cloning this repository:** both files are committed, so no build step is needed.
 
 (Renaming them to `.mjs` just tells Node they're ES modules.)
 
