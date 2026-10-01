@@ -18,10 +18,6 @@ export interface Capture {
 	textLength: number;
 	readerable: boolean;
 	mode: 'article' | 'full';
-	/** Kept in the markup as absolute URLs, to be fetched when the link is read. */
-	linkedImages: number;
-	/** Had no usable source (data:/blob:, or an unresolved placeholder). */
-	droppedImages: number;
 	/** Viewport width a full capture was laid out at, in CSS px; 0 in article mode. */
 	width: number;
 }

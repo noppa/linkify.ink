@@ -56,11 +56,6 @@ function setStatus(message, kind = 'info') {
 	statusLine.classList.toggle('error', kind === 'error');
 }
 
-/** @param {number} n @returns {string} */
-function plural(n) {
-	return n === 1 ? '' : 's';
-}
-
 /** @param {number} chars @returns {'ok' | 'warn' | 'bad'} */
 function sizeBand(chars) {
 	if (chars >= SIZE_LIMIT) return 'bad';
@@ -71,7 +66,7 @@ function sizeBand(chars) {
 /**
  * @param {{
  *   url: string, chars: number, title: string, mode: string,
- *   droppedImages: number, linkedImages: number, width: number,
+ *   width: number,
  * }} result
  */
 function showResult(result) {
@@ -93,14 +88,6 @@ function showResult(result) {
 		notes.push('Over 32,000 characters — some browsers and chat apps may truncate this link.');
 	} else if (result.chars >= SIZE_WARN) {
 		notes.push('Getting long. Article-only mode produces smaller links than full page.');
-	}
-	if (result.linkedImages > 0) {
-		const n = result.linkedImages;
-		notes.push(`${n} image${plural(n)} ${n === 1 ? 'loads' : 'load'} from the original site.`);
-	}
-	if (result.droppedImages > 0) {
-		const n = result.droppedImages;
-		notes.push(`${n} image${plural(n)} had no usable source (alt text kept).`);
 	}
 	notesLine.textContent = notes.join(' ');
 	notesLine.hidden = notes.length === 0;
