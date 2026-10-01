@@ -224,6 +224,44 @@ test.describe('editor page', () => {
 		await expect(preview.locator('.mermaid-preview')).toContainText('Alice');
 	});
 
+	test('follows the dark color scheme in the Markdown preview', async ({ page }) => {
+		await page.emulateMedia({ colorScheme: 'dark' });
+		await page.goto('/');
+		await page.locator('.editor-textarea').fill(
+			'# Dark\n\n| a | b |\n| - | - |\n| 1 | 2 |\n\n```js\nconst answer = 42;\n```\n\n```mermaid\nflowchart LR\n  Start --> Finish\n```',
+		);
+		await page.locator('.editor-textarea').blur();
+
+		const preview = page
+			.locator('.preview-iframe')
+			.contentFrame()
+			.locator('iframe')
+			.contentFrame();
+		await expect(preview.getByRole('heading', { name: 'Dark' })).toBeVisible();
+		await expect(preview.locator('body')).toHaveCSS(
+			'background-color',
+			'rgb(13, 17, 23)',
+		);
+		await expect(preview.locator('code .hljs-keyword')).toHaveCSS(
+			'color',
+			'rgb(255, 123, 114)',
+		);
+		await expect(preview.locator('th').first()).toHaveCSS(
+			'border-top-color',
+			'rgb(61, 68, 77)',
+		);
+		// Mermaid's theme is baked into the SVG, so a theme change re-renders it.
+		const mermaidNode = preview.locator('.mermaid-diagram .node rect').first();
+		await expect(mermaidNode).toHaveCSS('fill', 'rgb(31, 32, 32)');
+
+		await page.emulateMedia({ colorScheme: 'light' });
+		await expect(mermaidNode).toHaveCSS('fill', 'rgb(236, 236, 255)');
+		await expect(preview.locator('body')).toHaveCSS(
+			'background-color',
+			'rgb(255, 255, 255)',
+		);
+	});
+
 	test('syntax-highlights standalone code files', async ({ page }) => {
 		await page.goto('/');
 		await page.getByRole('button', { name: 'Toggle sidebar' }).click();
