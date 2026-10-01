@@ -146,10 +146,6 @@ async function captureToLink(options) {
 		// carries the page; anyone who wants a persistent archive wants a
 		// different tool.
 		linkedImages: capture.linkedImages,
-		// Only images with no usable source at all — a data: URI, or a lazy-loading
-		// placeholder that never resolved. These are gone; the alt text is all
-		// that's left of them.
-		droppedImages: capture.droppedImages,
 		// The viewport width a full capture was laid out at; 0 for article mode.
 		width: capture.width,
 	};

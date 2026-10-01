@@ -41,7 +41,6 @@
 	 *   readerable: boolean,
 	 *   mode: 'article' | 'full',
 	 *   linkedImages: number,
-	 *   droppedImages: number,
 	 *   width: number,
 	 * }} Capture
 	 */
@@ -111,11 +110,10 @@
 	 * Strip a parsed fragment down to safe, compact markup, in place.
 	 * @param {Element} root
 	 * @param {string} base page URL, for resolving relative links
-	 * @returns {{ linkedImages: number, droppedImages: number }}
+	 * @returns {{ linkedImages: number }}
 	 */
 	function sanitize(root, base) {
 		let linkedImages = 0;
-		let droppedImages = 0;
 
 		// Snapshot first: the walk mutates the tree, and a live collection would
 		// skip nodes as siblings shift under it.
@@ -139,7 +137,6 @@
 				// URI absolutize refuses. Keep the alt text, which is often the only
 				// description of a chart or diagram the article depends on.
 				if (!absolute) {
-					droppedImages++;
 					if (alt) {
 						const note = el.ownerDocument.createElement('p');
 						note.className = 'img-alt';
@@ -199,7 +196,7 @@
 			if (el.children.length === 0 && !el.textContent?.trim()) el.remove();
 		}
 
-		return { linkedImages, droppedImages };
+		return { linkedImages };
 	}
 
 	/**
@@ -1139,7 +1136,7 @@ ${body}
 	 * Snapshot the whole page as a computed-style capture; see the note at the top
 	 * of this section.
 	 * @param {string} base
-	 * @returns {Promise<{ html: string, linkedImages: number, droppedImages: number, width: number }>}
+	 * @returns {Promise<{ html: string, linkedImages: number, width: number }>}
 	 */
 	async function captureFull(base) {
 		const baseline = createBaseline();
@@ -1150,7 +1147,6 @@ ${body}
 		/** @type {Set<string>} */
 		const usedFamilies = new Set();
 		let linkedImages = 0;
-		let droppedImages = 0;
 
 		// Fragment targets are the only ids worth carrying: a footnote's "back to
 		// text" link dead-ends without the id it points at, and every other id is
@@ -1286,7 +1282,6 @@ ${body}
 				} else if (isBase64Image(src) || (entry && isBase64Image(entry[1]))) {
 					// The box and alt text stay; see `isBase64Image` for why the
 					// pixels don't.
-					droppedImages++;
 					if (entry) attrs.splice(attrs.indexOf(entry), 1);
 				}
 			} else if (el instanceof HTMLTextAreaElement) {
@@ -1364,7 +1359,7 @@ ${body}
 			`<title>${escapeHtml(document.title)}</title>` +
 			`<style>${css}</style></head>${renderChildren(root)}</html>`;
 
-		return { html, linkedImages, droppedImages, width };
+		return { html, linkedImages, width };
 	}
 
 	// ── Entry point ──────────────────────────────────────────────────────────────
@@ -1381,7 +1376,7 @@ ${body}
 		const readerable = LinkifyReadability.isProbablyReaderable(document);
 
 		if (mode === 'full') {
-			const { html, linkedImages, droppedImages, width } = await captureFull(base);
+			const { html, linkedImages, width } = await captureFull(base);
 			return {
 				html,
 				title: document.title,
@@ -1392,7 +1387,6 @@ ${body}
 				readerable,
 				mode,
 				linkedImages,
-				droppedImages,
 				width,
 			};
 		}
@@ -1422,7 +1416,7 @@ ${body}
 		const root = holder.getElementById('linkify-root');
 		if (!root) throw new Error('Failed to parse the extracted content');
 
-		const { linkedImages, droppedImages } = sanitize(root, base);
+		const { linkedImages } = sanitize(root, base);
 
 		const title = article.title || document.title;
 		const html = buildDocument({
@@ -1444,7 +1438,6 @@ ${body}
 			readerable,
 			mode,
 			linkedImages,
-			droppedImages,
 			width: 0,
 		};
 	}

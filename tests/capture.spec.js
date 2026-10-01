@@ -193,7 +193,6 @@ test('full-page capture drops base64 images', async ({ page }) => {
 	const capture = await page.evaluate(() => globalThis.__linkifyInkCapture({ mode: 'full' }));
 
 	expect(capture.html).not.toContain('base64');
-	expect(capture.droppedImages).toBe(1);
 	expect(capture.linkedImages).toBe(1);
 	// The image keeps its alt text, and the other layers of a multi-layer
 	// background survive the one that was dropped.

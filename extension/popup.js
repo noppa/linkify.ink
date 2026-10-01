@@ -71,7 +71,7 @@ function sizeBand(chars) {
 /**
  * @param {{
  *   url: string, chars: number, title: string, mode: string,
- *   droppedImages: number, linkedImages: number, width: number,
+ *   linkedImages: number, width: number,
  * }} result
  */
 function showResult(result) {
@@ -97,10 +97,6 @@ function showResult(result) {
 	if (result.linkedImages > 0) {
 		const n = result.linkedImages;
 		notes.push(`${n} image${plural(n)} ${n === 1 ? 'loads' : 'load'} from the original site.`);
-	}
-	if (result.droppedImages > 0) {
-		const n = result.droppedImages;
-		notes.push(`${n} image${plural(n)} left out: inline or unresolved (alt text kept).`);
 	}
 	notesLine.textContent = notes.join(' ');
 	notesLine.hidden = notes.length === 0;
