@@ -100,7 +100,7 @@ function showResult(result) {
 	}
 	if (result.droppedImages > 0) {
 		const n = result.droppedImages;
-		notes.push(`${n} image${plural(n)} had no usable source (alt text kept).`);
+		notes.push(`${n} image${plural(n)} left out: inline or unresolved (alt text kept).`);
 	}
 	notesLine.textContent = notes.join(' ');
 	notesLine.hidden = notes.length === 0;

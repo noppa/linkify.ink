@@ -166,3 +166,46 @@ test('full-page capture reproduces the rendered page', async ({ page }) => {
 		}
 	}
 });
+
+test('full-page capture drops base64 images', async ({ page }) => {
+	// A real (tiny) SVG, base64-encoded, so the live page actually renders it.
+	const svg = btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><rect width="1" height="1"/></svg>');
+	const b64 = `data:image/svg+xml;base64,${svg}`;
+	const utf8 = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E`;
+	await page.setContent(`<!doctype html>
+<html><head><style>
+	.bg { width: 20px; height: 20px; background: url("${b64}") no-repeat, linear-gradient(red, blue); }
+	.mask { width: 20px; height: 20px; background: #000; mask-image: url("${b64}"); }
+	.plain { width: 20px; height: 20px; background-image: url("${utf8}"); }
+	li { list-style-image: url("${b64}"); }
+	.deco::before { content: url("${b64}"); }
+</style></head><body>
+<img id="inline" src="${b64}" alt="inline logo" width="40" height="20">
+<img src="https://example.invalid/linked.png" alt="linked">
+<div class="bg"></div><div class="mask"></div><div class="plain"></div>
+<ul><li>item</li></ul>
+<p class="deco">decorated</p>
+<svg width="10" height="10"><image href="${b64}" width="10" height="10"/></svg>
+</body></html>`);
+
+	await page.addScriptTag({ path: path.join(root, 'vendor', 'vendor.readability.bundle.js') });
+	await page.addScriptTag({ path: path.join(root, 'extension', 'content', 'capture.js') });
+	const capture = await page.evaluate(() => globalThis.__linkifyInkCapture({ mode: 'full' }));
+
+	expect(capture.html).not.toContain('base64');
+	expect(capture.droppedImages).toBe(1);
+	expect(capture.linkedImages).toBe(1);
+	// The image keeps its alt text, and the other layers of a multi-layer
+	// background survive the one that was dropped.
+	expect(capture.html).toMatch(/<img[^>]*alt="inline logo"/);
+	expect(capture.html).toContain('linear-gradient');
+	// A dropped mask hides what it masked rather than revealing a solid box.
+	expect(capture.html).toContain('mask-image:linear-gradient(transparent,transparent)');
+	// Percent-encoded data: URIs are plain text and stay.
+	expect(capture.html).toContain('data:image/svg+xml,');
+
+	// And the result is still a page that parses into the same structure.
+	await page.setContent(capture.html);
+	expect(await page.locator('img').count()).toBe(2);
+	expect(await page.locator('svg image').count()).toBe(1);
+});

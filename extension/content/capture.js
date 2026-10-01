@@ -16,6 +16,8 @@
 //             of magnitude smaller. Nothing is filtered, because the moment full
 //             mode starts deciding what is content and what is clutter it has
 //             become a bad ad blocker and duplicated article mode badly.
+//             (Base64 images are dropped, but by encoding, not by judging
+//             content — they cost far more URL than they are worth.)
 //
 // Neither mode ships scripts: article mode strips them, full mode never copies
 // them.
@@ -310,7 +312,8 @@ ${body}
 	 * drops what it doesn't recognize, full mode keeps it. `data:` and `blob:` are
 	 * returned untouched (the first is already self-contained, the second is dead
 	 * outside its page but is not ours to delete), and so is `javascript:` — the
-	 * preview declines to run scripts anyway.
+	 * preview declines to run scripts anyway. Base64 images are the exception, and
+	 * are taken out before this is reached; see `isBase64Image`.
 	 * @param {string} value
 	 * @param {string} base
 	 * @returns {string}
@@ -325,6 +328,38 @@ ${body}
 		} catch {
 			return value;
 		}
+	}
+
+	// Base64 images are the one thing full mode drops on purpose. They are already
+	// compressed (or, for SVG, base64 has scrambled the text zstd would otherwise
+	// find repeats in), so every byte costs ~1.33 characters of URL, and they are
+	// almost never the content: icons, chevrons, spinners, blur-up placeholders. One
+	// inlined SVG logo can outweigh the page's text. Percent-encoded `data:` URIs
+	// stay — they are plain text and compress like the rest of the markup.
+	const BASE64_IMAGE_RE = /^\s*data:image\/[^,]*;base64,/i;
+	const BASE64_IMAGE_URL_RE = /url\(\s*(["']?)data:image\/[^,]*;base64,[^"')]*\1\s*\)/gi;
+
+	/** @param {string} url @returns {boolean} */
+	function isBase64Image(url) {
+		return BASE64_IMAGE_RE.test(url);
+	}
+
+	/**
+	 * A computed value with every base64 `url(...)` image replaced by whatever
+	 * draws nothing in that property. `none` everywhere it is valid; a mask has to
+	 * become fully transparent instead, because removing the mask would paint the
+	 * element's whole background where the icon used to be cut out of it.
+	 * @param {string} prop
+	 * @param {string} value
+	 * @returns {string}
+	 */
+	function dropBase64Images(prop, value) {
+		if (!value.includes('base64,')) return value;
+		const nothing =
+			prop === 'mask-image' ? 'linear-gradient(transparent,transparent)'
+			: prop === 'content' ? '""'
+			: 'none';
+		return value.replace(BASE64_IMAGE_URL_RE, nothing);
 	}
 
 	// Emitted as the first rule of every capture and applied to the baseline iframe,
@@ -729,7 +764,7 @@ ${body}
 		for (const prop of VISUAL_PROPS) {
 			if (flags.skipSize && (prop === 'width' || prop === 'height')) continue;
 
-			const value = computed.getPropertyValue(prop);
+			const value = dropBase64Images(prop, computed.getPropertyValue(prop));
 			if (!value) continue;
 
 			// The two diffs. An inherited property is compared against the parent
@@ -1042,7 +1077,12 @@ ${body}
 
 		for (const el of Array.from(clone.querySelectorAll('*'))) {
 			for (const attr of Array.from(el.attributes)) {
-				if (!keepSvgAttr(attr.name)) el.removeAttribute(attr.name);
+				// `<image href="data:…;base64,…">`, the usual way a raster ends up
+				// inside an SVG; see `isBase64Image`.
+				const drop =
+					!keepSvgAttr(attr.name) ||
+					((attr.name === 'href' || attr.name === 'xlink:href') && isBase64Image(attr.value));
+				if (drop) el.removeAttribute(attr.name);
 			}
 		}
 
@@ -1099,7 +1139,7 @@ ${body}
 	 * Snapshot the whole page as a computed-style capture; see the note at the top
 	 * of this section.
 	 * @param {string} base
-	 * @returns {Promise<{ html: string, linkedImages: number, width: number }>}
+	 * @returns {Promise<{ html: string, linkedImages: number, droppedImages: number, width: number }>}
 	 */
 	async function captureFull(base) {
 		const baseline = createBaseline();
@@ -1110,6 +1150,7 @@ ${body}
 		/** @type {Set<string>} */
 		const usedFamilies = new Set();
 		let linkedImages = 0;
+		let droppedImages = 0;
 
 		// Fragment targets are the only ids worth carrying: a footnote's "back to
 		// text" link dead-ends without the id it points at, and every other id is
@@ -1242,6 +1283,11 @@ ${body}
 					linkedImages++;
 					if (entry) entry[1] = src;
 					else attrs.push(['src', src]);
+				} else if (isBase64Image(src) || (entry && isBase64Image(entry[1]))) {
+					// The box and alt text stay; see `isBase64Image` for why the
+					// pixels don't.
+					droppedImages++;
+					if (entry) attrs.splice(attrs.indexOf(entry), 1);
 				}
 			} else if (el instanceof HTMLTextAreaElement) {
 				if (el.value) children.push({ kind: 'text', text: el.value });
@@ -1318,7 +1364,7 @@ ${body}
 			`<title>${escapeHtml(document.title)}</title>` +
 			`<style>${css}</style></head>${renderChildren(root)}</html>`;
 
-		return { html, linkedImages, width };
+		return { html, linkedImages, droppedImages, width };
 	}
 
 	// ── Entry point ──────────────────────────────────────────────────────────────
@@ -1335,7 +1381,7 @@ ${body}
 		const readerable = LinkifyReadability.isProbablyReaderable(document);
 
 		if (mode === 'full') {
-			const { html, linkedImages, width } = await captureFull(base);
+			const { html, linkedImages, droppedImages, width } = await captureFull(base);
 			return {
 				html,
 				title: document.title,
@@ -1346,8 +1392,7 @@ ${body}
 				readerable,
 				mode,
 				linkedImages,
-				// Nothing is dropped in full mode — that is the point of it.
-				droppedImages: 0,
+				droppedImages,
 				width,
 			};
 		}

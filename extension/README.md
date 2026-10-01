@@ -19,7 +19,7 @@ The whole design is shaped by URL length (see [Limits](../README.md#limits) in t
 - **Article-only mode is the default.** Full-page capture is there for pages Readability can't parse, or where the design is the point. It is a static snapshot rebuilt from computed styles (see below), which keeps it in the same size range as an article on simple pages; a busy page with a lot of inline SVG still gets big.
 - **Images keep their original URLs.** An absolute URL costs a hundred-odd characters; the image itself would cost tens of thousands. Images are already compressed, so zstd can't shrink them, and every byte becomes about 1.33 characters of URL. One photo outweighs the whole article. The reader sees the page as written, but the capture needs the network and breaks if the host moves the file. If you want something that survives the original site going away, use [SingleFile](https://github.com/gildas-lormeau/SingleFile) instead; a URL is the wrong container for an archive.
 
-Images with no usable source (a `data:` URI, or a lazy-loading placeholder that never resolved) are the one case that's genuinely dropped. Their alt text is kept in place.
+Images that aren't a URL are dropped instead: a lazy-loading placeholder that never resolved, or an image inlined as a `data:` URI. Base64 ones in particular (SVG icons and logos, mostly) compress badly and are rarely the content, so full mode drops them too, from `<img>`, CSS backgrounds, masks and `<image>`s inside SVG alike. Alt text is kept in place.
 
 ## The two capture modes
 
@@ -37,7 +37,7 @@ Instead, full mode walks the DOM, asks the browser what it decided for every vis
 
 What makes it small enough to be viable is that the capture *diffs* rather than dumps. A computed style is ~400 declarations per element, and nearly all of them are either the UA default for that tag or an inherited value the parent already has. Non-inherited properties are compared against a per-tag baseline measured in a hidden iframe carrying only a reset rule; inherited ones are compared against the parent. Only what survives is emitted, around 19 declarations per element. Declarations shared by the same set of elements become one class, and the rest go inline. The same reset rule is the first thing in the generated stylesheet, so "differs from the baseline" means exactly "load-bearing in the output". `tests/capture.spec.js` guards that agreement.
 
-Full mode does not filter, because a full mode that decides what counts as clutter is just a bad ad blocker bolted onto a worse version of article mode. Run your own blocker and capture what survives. It does do the fidelity work a snapshot needs:
+Full mode does not filter, because a full mode that decides what counts as clutter is just a bad ad blocker bolted onto a worse version of article mode. Run your own blocker and capture what survives. (Base64 images are the exception, dropped for their size rather than judged as clutter.) It does do the fidelity work a snapshot needs:
 
 - **Open shadow roots are flattened** into the composed tree the browser actually draws, with slots replaced by what was slotted into them.
 - **SVG ships verbatim**, since its geometry lives in attributes rather than CSS. `<use href="#…">` sprite references are resolved, because the sprite sheet itself is `display:none` and would otherwise be dropped.
