@@ -5,24 +5,34 @@ import { marked, Renderer } from 'marked';
 import hljs from 'highlight.js/lib/common';
 import mermaid from 'mermaid';
 
-mermaid.initialize({
-	startOnLoad: false,
-	securityLevel: 'strict',
-	suppressErrorRendering: true,
-});
-
 let diagramId = 0;
+/** @type {Promise<unknown>} */
+let mermaidQueue = Promise.resolve();
 
 /**
  * Render Mermaid source to inert SVG. The caller puts the result into the
  * isolated preview document; no script needs to run inside that document.
+ * Mermaid bakes its theme's colors into the SVG, so the caller picks the theme.
  * @param {string} source
+ * @param {boolean} [darkMode]
  * @returns {Promise<string>}
  */
-export async function renderMermaid(source) {
+export function renderMermaid(source, darkMode = false) {
 	const id = `linkify-mermaid-${++diagramId}`;
-	const { svg } = await mermaid.render(id, source);
-	return svg;
+	// The theme is global Mermaid config, so renders run one at a time: a render
+	// for the other theme must not reconfigure Mermaid while this one is drawing.
+	const rendered = mermaidQueue.then(async () => {
+		mermaid.initialize({
+			startOnLoad: false,
+			securityLevel: 'strict',
+			suppressErrorRendering: true,
+			theme: darkMode ? 'dark' : 'default',
+		});
+		const { svg } = await mermaid.render(id, source);
+		return svg;
+	});
+	mermaidQueue = rendered.catch(() => {});
+	return rendered;
 }
 
 /**
@@ -30,9 +40,10 @@ export async function renderMermaid(source) {
  * Marked's code renderer is synchronous, so it first leaves unguessable
  * placeholders and Mermaid fills them after the rest of the document is parsed.
  * @param {string} source
+ * @param {boolean} [darkMode] Render Mermaid diagrams with the dark theme
  * @returns {Promise<string>}
  */
-export async function renderMarkdown(source) {
+export async function renderMarkdown(source, darkMode = false) {
 	/** @type {{ placeholder: string, source: string }[]} */
 	const diagrams = [];
 	const nonce = crypto.randomUUID();
@@ -50,7 +61,7 @@ export async function renderMarkdown(source) {
 	for (const diagram of diagrams) {
 		let rendered;
 		try {
-			rendered = `<div class="mermaid-diagram">${await renderMermaid(diagram.source)}</div>`;
+			rendered = `<div class="mermaid-diagram">${await renderMermaid(diagram.source, darkMode)}</div>`;
 		} catch (error) {
 			rendered = renderMermaidError(error);
 		}

@@ -43,6 +43,37 @@ function loadPreviewLibs() {
  * }} Sandbox
  */
 
+const DARK_SCHEME_QUERY = '(prefers-color-scheme: dark)';
+
+/**
+ * Whether the system color scheme is dark, kept current as it changes. The
+ * sandboxed preview document follows the same preference through CSS.
+ * @returns {boolean}
+ */
+function usePrefersDark() {
+	const [prefersDark, setPrefersDark] = useState(
+		() => window.matchMedia(DARK_SCHEME_QUERY).matches,
+	);
+	useEffect(() => {
+		const query = window.matchMedia(DARK_SCHEME_QUERY);
+		/** @param {MediaQueryListEvent} event */
+		const onChange = (event) => setPrefersDark(event.matches);
+		query.addEventListener('change', onChange);
+		return () => query.removeEventListener('change', onChange);
+	}, []);
+	return prefersDark;
+}
+
+/**
+ * Whether `file`'s preview can contain Mermaid diagrams, whose theme colors are
+ * baked into the rendered SVG rather than following the preview's CSS.
+ * @param {FileEntry} file @returns {boolean}
+ */
+function canContainMermaid(file) {
+	const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+	return ext === 'md' || ext === 'mermaid' || ext === 'mmd';
+}
+
 /** @param {FileEntry} file @returns {boolean} */
 export function isHtmlFile(file) {
 	const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
@@ -135,6 +166,12 @@ export default function Preview({ files, activeFile, followActiveFile = false })
 		? activeFile
 		: resolvePreviewFile(files, activeFile, lastHtmlNameRef.current);
 	const isHtmlPreview = Boolean(previewFile && isHtmlFile(previewFile));
+	// Only previews with Mermaid diagrams re-render when the theme changes; the
+	// rest restyle themselves through CSS (and an HTML page shouldn't reload).
+	const prefersDark = usePrefersDark();
+	const mermaidDarkMode = Boolean(
+		previewFile && canContainMermaid(previewFile) && prefersDark,
+	);
 
 	// Whether the running sandbox had to fall back to rendering from blob: URLs
 	// because its service worker was refused (Safari blocks them in a
@@ -169,6 +206,7 @@ export default function Preview({ files, activeFile, followActiveFile = false })
 			previewFile,
 			filesRef,
 			sandboxRef,
+			mermaidDarkMode,
 			() => cancelled,
 		);
 		// Guards the async markdown path: if the file changes (or we unmount)
@@ -176,7 +214,7 @@ export default function Preview({ files, activeFile, followActiveFile = false })
 		return () => {
 			cancelled = true;
 		};
-	}, [previewFile, files]);
+	}, [previewFile, files, mermaidDarkMode]);
 
 	// Final teardown on unmount: unregister the sandbox service worker.
 	useEffect(
@@ -232,9 +270,17 @@ export default function Preview({ files, activeFile, followActiveFile = false })
  * @param {FileEntry} file
  * @param {{ current: FileEntry[] }} filesRef
  * @param {{ current: Sandbox | null }} sandboxRef
+ * @param {boolean} mermaidDarkMode — render Mermaid diagrams with the dark theme
  * @param {() => boolean} isCancelled — true once this render is superseded
  */
-function renderPreview(iframe, file, filesRef, sandboxRef, isCancelled) {
+function renderPreview(
+	iframe,
+	file,
+	filesRef,
+	sandboxRef,
+	mermaidDarkMode,
+	isCancelled,
+) {
 	// TODO: Create utility function getFileExtension
 	const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
 
@@ -276,7 +322,7 @@ function renderPreview(iframe, file, filesRef, sandboxRef, isCancelled) {
 		// rendered to static SVG before this document enters the sandbox.
 		loadPreviewLibs()
 			.then(({ renderMarkdown }) =>
-				renderMarkdown(new TextDecoder().decode(file.content)),
+				renderMarkdown(new TextDecoder().decode(file.content), mermaidDarkMode),
 			)
 			.then((rendered) => {
 				if (isCancelled()) return;
@@ -314,7 +360,7 @@ function renderPreview(iframe, file, filesRef, sandboxRef, isCancelled) {
 			return;
 		}
 		loadPreviewLibs()
-			.then(({ renderMermaid }) => renderMermaid(source))
+			.then(({ renderMermaid }) => renderMermaid(source, mermaidDarkMode))
 			.then((rendered) => {
 				if (isCancelled()) return;
 				showInSandbox(
@@ -476,11 +522,6 @@ pre code.hljs { display: block; box-sizing: border-box; overflow-x: auto; paddin
 .mermaid-diagram:first-child { margin-top: 0; }
 .mermaid-diagram:last-child { margin-bottom: 0; }
 .mermaid-diagram svg { display: inline-block; max-width: 100%; height: auto; }
-/* Mermaid bakes its (light) theme colors into the SVG, so in dark mode the
-   diagram sits on a light card instead of having dark labels on a dark page. */
-@media (prefers-color-scheme: dark) {
-	.mermaid-diagram { padding: 16px; border-radius: 6px; background: #fff; }
-}
 .mermaid-error { padding: 12px; border: 1px solid var(--error-border); border-radius: 6px; background: var(--error-bg); color: var(--error); text-align: left; }
 .mermaid-error pre { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.45 monospace; }
 `;
