@@ -224,6 +224,34 @@ test.describe('editor page', () => {
 		await expect(preview.locator('.mermaid-preview')).toContainText('Alice');
 	});
 
+	test('follows the dark color scheme in the Markdown preview', async ({ page }) => {
+		await page.emulateMedia({ colorScheme: 'dark' });
+		await page.goto('/');
+		await page.locator('.editor-textarea').fill(
+			'# Dark\n\n| a | b |\n| - | - |\n| 1 | 2 |\n\n```js\nconst answer = 42;\n```',
+		);
+		await page.locator('.editor-textarea').blur();
+
+		const preview = page
+			.locator('.preview-iframe')
+			.contentFrame()
+			.locator('iframe')
+			.contentFrame();
+		await expect(preview.getByRole('heading', { name: 'Dark' })).toBeVisible();
+		await expect(preview.locator('body')).toHaveCSS(
+			'background-color',
+			'rgb(13, 17, 23)',
+		);
+		await expect(preview.locator('code .hljs-keyword')).toHaveCSS(
+			'color',
+			'rgb(255, 123, 114)',
+		);
+		await expect(preview.locator('th').first()).toHaveCSS(
+			'border-top-color',
+			'rgb(61, 68, 77)',
+		);
+	});
+
 	test('syntax-highlights standalone code files', async ({ page }) => {
 		await page.goto('/');
 		await page.getByRole('button', { name: 'Toggle sidebar' }).click();

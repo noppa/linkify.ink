@@ -382,35 +382,106 @@ function syntheticFile(htmlSource) {
 	return { name: PREVIEW_ENTRY, content: new TextEncoder().encode(htmlSource) };
 }
 
+// Shared by every synthetic preview document (markdown, code, Mermaid). Colors
+// are tokens resolved with light-dark(), so the preview follows the viewer's
+// system theme like the editor does. Code colors are GitHub's light and dark
+// palettes; the markdown typography borrows the relevant parts of Simple.css
+// (MIT, https://simplecss.org).
 const PREVIEW_STYLES = `
-html { color-scheme: light; }
-body { box-sizing: border-box; margin: 0; padding: 16px; font-family: sans-serif; color: #24292f; }
-.markdown-preview { max-width: 720px; }
-.markdown-preview :not(pre) > code { padding: 0.15em 0.35em; border-radius: 4px; background: #eff1f3; font: 0.875em ui-monospace, monospace; }
+:root {
+	color-scheme: light dark;
+	--bg: light-dark(#fff, #0d1117);
+	--text: light-dark(#1f2328, #e6edf3);
+	--text-muted: light-dark(#59636e, #9198a1);
+	--border: light-dark(#d1d9e0, #3d444d);
+	--accent: light-dark(#0969da, #4493f8);
+	--accent-bg: light-dark(#f6f8fa, #151b23);
+	--code-bg: light-dark(#f6f8fa, #151b23);
+	--inline-code-bg: light-dark(#eff1f3, #2f353d);
+	--mark-bg: light-dark(#fff8c5, #bb800926);
+	--hl-comment: light-dark(#59636e, #9198a1);
+	--hl-keyword: light-dark(#cf222e, #ff7b72);
+	--hl-title: light-dark(#8250df, #d2a8ff);
+	--hl-constant: light-dark(#0550ae, #79c0ff);
+	--hl-string: light-dark(#0a3069, #a5d6ff);
+	--hl-builtin: light-dark(#953800, #ffa657);
+	--hl-tag: light-dark(#116329, #7ee787);
+	--hl-section: light-dark(#0550ae, #1f6feb);
+	--hl-bullet: light-dark(#953800, #f2cc60);
+	--hl-addition: light-dark(#116329, #aff5b4);
+	--hl-addition-bg: light-dark(#dafbe1, #033a16);
+	--hl-deletion: light-dark(#82071e, #ffdcd7);
+	--hl-deletion-bg: light-dark(#ffebe9, #67060c);
+	--error: light-dark(#82071e, #ffa198);
+	--error-border: light-dark(#cf222e, #f85149);
+	--error-bg: light-dark(#ffebe9, #25171c);
+}
+body { box-sizing: border-box; margin: 0; padding: 16px; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', Helvetica, Arial, sans-serif; }
+
+.markdown-preview { max-width: 46rem; margin-inline: auto; padding: 16px 20px 32px; font-size: 1rem; line-height: 1.6; overflow-wrap: break-word; }
+.markdown-preview > :first-child { margin-top: 0; }
+.markdown-preview > :last-child { margin-bottom: 0; }
+.markdown-preview :is(h1, h2, h3, h4, h5, h6) { margin: 1.5em 0 0.5em; line-height: 1.25; font-weight: 600; }
+.markdown-preview h1 { font-size: 2em; }
+.markdown-preview h2 { font-size: 1.5em; }
+.markdown-preview h3 { font-size: 1.25em; }
+.markdown-preview h4 { font-size: 1em; }
+.markdown-preview h5 { font-size: 0.875em; }
+.markdown-preview h6 { font-size: 0.85em; color: var(--text-muted); }
+.markdown-preview :is(h1, h2) { padding-bottom: 0.3em; border-bottom: 1px solid var(--border); }
+.markdown-preview :is(p, ul, ol, dl, table, blockquote, details, figure) { margin: 0 0 1em; }
+.markdown-preview :is(ul, ol) { padding-inline-start: 2em; }
+.markdown-preview li + li, .markdown-preview li > :is(ul, ol) { margin-top: 0.25em; }
+.markdown-preview li > :is(ul, ol) { margin-bottom: 0; }
+.markdown-preview li:has(> input[type='checkbox']:first-child) { list-style: none; }
+.markdown-preview li > input[type='checkbox']:first-child { margin: 0 0.4em 0 -1.4em; vertical-align: -0.1em; accent-color: var(--accent); }
+.markdown-preview a { color: var(--accent); text-decoration: underline; text-underline-offset: 0.15em; }
+.markdown-preview a:hover { text-decoration-thickness: 2px; }
+.markdown-preview blockquote { margin-inline: 0; padding: 0 1em; border-inline-start: 0.25em solid var(--border); color: var(--text-muted); }
+.markdown-preview hr { height: 1px; margin: 1.5em 0; border: 0; background: var(--border); }
+.markdown-preview :is(img, video) { max-width: 100%; height: auto; border-radius: 6px; }
+.markdown-preview table { display: block; max-width: 100%; width: max-content; overflow-x: auto; border-collapse: collapse; }
+.markdown-preview :is(th, td) { padding: 6px 13px; border: 1px solid var(--border); text-align: start; }
+.markdown-preview th { font-weight: 600; background: var(--accent-bg); }
+.markdown-preview tbody tr:nth-child(even) { background: var(--accent-bg); }
+.markdown-preview mark { padding: 0.1em 0.2em; border-radius: 3px; background: var(--mark-bg); color: inherit; }
+.markdown-preview kbd { padding: 0.1em 0.4em; border: 1px solid var(--border); border-bottom-width: 3px; border-radius: 6px; background: var(--accent-bg); font: 0.85em ui-monospace, monospace; }
+.markdown-preview details { padding: 0.5em 1em; border: 1px solid var(--border); border-radius: 6px; }
+.markdown-preview summary { cursor: pointer; font-weight: 600; }
+.markdown-preview details[open] > summary { margin-bottom: 0.5em; }
+.markdown-preview figcaption { color: var(--text-muted); font-size: 0.875em; }
+.markdown-preview :not(pre) > code { padding: 0.15em 0.35em; border-radius: 4px; background: var(--inline-code-bg); font: 0.875em ui-monospace, monospace; }
+
 .code-preview { padding: 0; }
 pre { margin: 16px 0; }
-pre code.hljs { display: block; box-sizing: border-box; overflow-x: auto; padding: 12px; border: 1px solid #d0d7de; border-radius: 6px; background: #f6f8fa; color: #24292f; font: 13px/1.5 ui-monospace, monospace; tab-size: 2; }
+pre code.hljs { display: block; box-sizing: border-box; overflow-x: auto; padding: 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--code-bg); color: var(--text); font: 13px/1.5 ui-monospace, monospace; tab-size: 2; }
 .code-preview pre { min-height: 100vh; margin: 0; }
 .code-preview pre code.hljs { min-height: 100vh; border: 0; border-radius: 0; }
-.hljs-comment, .hljs-quote { color: #6e7781; font-style: italic; }
-.hljs-doctag, .hljs-keyword, .hljs-meta .hljs-keyword, .hljs-template-tag, .hljs-type { color: #cf222e; }
-.hljs-title, .hljs-title.class_, .hljs-title.function_ { color: #8250df; }
-.hljs-attr, .hljs-attribute, .hljs-literal, .hljs-meta, .hljs-number, .hljs-operator, .hljs-selector-attr, .hljs-selector-class, .hljs-selector-id, .hljs-variable { color: #0550ae; }
-.hljs-meta .hljs-string, .hljs-regexp, .hljs-string { color: #0a3069; }
-.hljs-built_in, .hljs-symbol { color: #953800; }
-.hljs-code, .hljs-formula, .hljs-name, .hljs-params, .hljs-property, .hljs-selector-pseudo, .hljs-selector-tag, .hljs-subst { color: #116329; }
-.hljs-section { color: #0550ae; font-weight: 700; }
-.hljs-bullet { color: #953800; }
+.hljs-comment, .hljs-quote { color: var(--hl-comment); font-style: italic; }
+.hljs-doctag, .hljs-keyword, .hljs-meta .hljs-keyword, .hljs-template-tag, .hljs-type { color: var(--hl-keyword); }
+.hljs-title, .hljs-title.class_, .hljs-title.function_ { color: var(--hl-title); }
+.hljs-attr, .hljs-attribute, .hljs-literal, .hljs-meta, .hljs-number, .hljs-operator, .hljs-selector-attr, .hljs-selector-class, .hljs-selector-id, .hljs-variable { color: var(--hl-constant); }
+.hljs-meta .hljs-string, .hljs-regexp, .hljs-string { color: var(--hl-string); }
+.hljs-built_in, .hljs-symbol { color: var(--hl-builtin); }
+.hljs-code, .hljs-formula, .hljs-name, .hljs-params, .hljs-property, .hljs-selector-pseudo, .hljs-selector-tag, .hljs-subst { color: var(--hl-tag); }
+.hljs-section { color: var(--hl-section); font-weight: 700; }
+.hljs-bullet { color: var(--hl-bullet); }
 .hljs-emphasis { font-style: italic; }
 .hljs-strong { font-weight: 700; }
-.hljs-addition { color: #116329; background: #dafbe1; }
-.hljs-deletion { color: #82071e; background: #ffebe9; }
+.hljs-addition { color: var(--hl-addition); background: var(--hl-addition-bg); }
+.hljs-deletion { color: var(--hl-deletion); background: var(--hl-deletion-bg); }
+
 .mermaid-preview { min-height: calc(100vh - 32px); display: grid; place-items: center; }
 .mermaid-diagram { margin: 16px 0; overflow: auto; text-align: center; }
 .mermaid-diagram:first-child { margin-top: 0; }
 .mermaid-diagram:last-child { margin-bottom: 0; }
 .mermaid-diagram svg { display: inline-block; max-width: 100%; height: auto; }
-.mermaid-error { padding: 12px; border: 1px solid #cf222e; border-radius: 6px; background: #ffebe9; color: #82071e; text-align: left; }
+/* Mermaid bakes its (light) theme colors into the SVG, so in dark mode the
+   diagram sits on a light card instead of having dark labels on a dark page. */
+@media (prefers-color-scheme: dark) {
+	.mermaid-diagram { padding: 16px; border-radius: 6px; background: #fff; }
+}
+.mermaid-error { padding: 12px; border: 1px solid var(--error-border); border-radius: 6px; background: var(--error-bg); color: var(--error); text-align: left; }
 .mermaid-error pre { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.45 monospace; }
 `;
 
