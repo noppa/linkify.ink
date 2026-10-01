@@ -114,9 +114,72 @@
 					frame = document.createElement('iframe');
 					frame.id = 'content';
 					frame.setAttribute('sandbox', CONTENT_SANDBOX);
+					frame.addEventListener('load', watchLayout);
 					document.body.appendChild(frame);
 				}
 				frame.src = src || '/' + pendingEntry + '?__preview=' + ++renderCount + '&__session=' + SESSION;
+			}
+
+			// ── Declared layout width ──
+
+			// The width the shown document asks to be laid out at, from a numeric
+			// `<meta name="viewport" content="width=…">`; 0 when it declares none. A
+			// full-page capture declares the desktop width it was taken at, so a phone
+			// can lay it out that wide and zoom out to fit. A viewport meta only
+			// applies to a top-level document, though, and this one is two frames
+			// deep. So the loader reports the width, and the content's height, to the
+			// app, which applies the width to its own viewport and grows this frame
+			// to the content's height: the browser then zooms the whole page natively,
+			// as it would any desktop site (see Preview.js).
+			let sizeObserver = null;
+
+			/**
+			 * The content attribute is a comma-separated list of key=value pairs, which
+			 * no DOM API parses; `width=device-width` and the like aren't a number and
+			 * count as no width.
+			 * @param {Document} doc
+			 */
+			function declaredWidthOf(doc) {
+				const content = doc.querySelector('meta[name="viewport" i]')?.getAttribute('content') ?? '';
+				for (const pair of content.split(/[,;]/)) {
+					const [key, value] = pair.split('=').map((part) => part.trim());
+					if (key?.toLowerCase() !== 'width') continue;
+					const width = Number(value);
+					return Number.isFinite(width) && width > 0 ? width : 0;
+				}
+				return 0;
+			}
+
+			/** @param {number} width @param {number} height */
+			function reportLayout(width, height) {
+				window.parent.postMessage(
+					{ type: 'content-layout', width, height },
+					PARENT_ORIGIN,
+				);
+			}
+
+			// Each render reports again once loaded: the height, for a fixed-width
+			// document, and otherwise width 0, which tells the app to stop fitting.
+			// Images and webfonts keep changing the height after load, so it is
+			// watched for as long as the document is shown.
+			function watchLayout() {
+				sizeObserver?.disconnect();
+				sizeObserver = null;
+				const doc = document.getElementById('content')?.contentDocument;
+				const width = doc?.body ? declaredWidthOf(doc) : 0;
+				if (!width) {
+					reportLayout(0, 0);
+					return;
+				}
+				// Not documentElement.scrollHeight: that is never less than the frame's
+				// own height, so once the app grew the frame it could never shrink.
+				const measure = () => reportLayout(width, Math.ceil(Math.max(
+					doc.documentElement.getBoundingClientRect().height,
+					doc.body.scrollHeight,
+				)));
+				sizeObserver = new ResizeObserver(measure);
+				sizeObserver.observe(doc.documentElement);
+				sizeObserver.observe(doc.body);
 			}
 
 			// ── Fallback rendering, for browsers that won't run the service worker ──
