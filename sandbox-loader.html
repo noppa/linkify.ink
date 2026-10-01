@@ -122,7 +122,7 @@
 
 			// ── Declared layout width ──
 
-			// The width the entry document asks to be laid out at, from a numeric
+			// The width the shown document asks to be laid out at, from a numeric
 			// `<meta name="viewport" content="width=…">`; 0 when it declares none. A
 			// full-page capture declares the desktop width it was taken at, so a phone
 			// can lay it out that wide and zoom out to fit. A viewport meta only
@@ -131,25 +131,29 @@
 			// app, which applies the width to its own viewport and grows this frame
 			// to the content's height: the browser then zooms the whole page natively,
 			// as it would any desktop site (see Preview.js).
-			let declaredWidth = 0;
 			let sizeObserver = null;
 
-			/** @param {Uint8Array | undefined} bytes */
-			function readDeclaredWidth(bytes) {
-				if (!bytes) return 0;
-				const source = new TextDecoder().decode(bytes);
-				const bodyStart = source.search(/<body[\s>]/i);
-				const head = bodyStart === -1 ? source : source.slice(0, bodyStart);
-				const doc = new DOMParser().parseFromString(head, 'text/html');
+			/**
+			 * The content attribute is a comma-separated list of key=value pairs, which
+			 * no DOM API parses; `width=device-width` and the like aren't a number and
+			 * count as no width.
+			 * @param {Document} doc
+			 */
+			function declaredWidthOf(doc) {
 				const content = doc.querySelector('meta[name="viewport" i]')?.getAttribute('content') ?? '';
-				const match = /(?:^|[,;\s])width\s*=\s*(\d+(?:\.\d+)?)/i.exec(content);
-				return match ? Number(match[1]) : 0;
+				for (const pair of content.split(/[,;]/)) {
+					const [key, value] = pair.split('=').map((part) => part.trim());
+					if (key?.toLowerCase() !== 'width') continue;
+					const width = Number(value);
+					return Number.isFinite(width) && width > 0 ? width : 0;
+				}
+				return 0;
 			}
 
-			/** @param {number} height */
-			function reportLayout(height) {
+			/** @param {number} width @param {number} height */
+			function reportLayout(width, height) {
 				window.parent.postMessage(
-					{ type: 'content-layout', width: declaredWidth, height },
+					{ type: 'content-layout', width, height },
 					PARENT_ORIGIN,
 				);
 			}
@@ -162,13 +166,14 @@
 				sizeObserver?.disconnect();
 				sizeObserver = null;
 				const doc = document.getElementById('content')?.contentDocument;
-				if (!declaredWidth || !doc?.body) {
-					reportLayout(0);
+				const width = doc?.body ? declaredWidthOf(doc) : 0;
+				if (!width) {
+					reportLayout(0, 0);
 					return;
 				}
 				// Not documentElement.scrollHeight: that is never less than the frame's
 				// own height, so once the app grew the frame it could never shrink.
-				const measure = () => reportLayout(Math.ceil(Math.max(
+				const measure = () => reportLayout(width, Math.ceil(Math.max(
 					doc.documentElement.getBoundingClientRect().height,
 					doc.body.scrollHeight,
 				)));
@@ -269,9 +274,6 @@
 				if (event.origin !== PARENT_ORIGIN) return;
 				if (!event.data || event.data.type !== 'files') return;
 				pendingEntry = event.data.entry || 'index.html';
-				const entryName = normalizeName(pendingEntry);
-				const entryKey = Object.keys(event.data.files).find((name) => normalizeName(name) === entryName);
-				declaredWidth = entryKey ? readDeclaredWidth(event.data.files[entryKey]) : 0;
 				if (!serviceWorkerReady) {
 					renderWithBlobUrls(event.data.files);
 					return;
