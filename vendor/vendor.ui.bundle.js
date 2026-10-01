@@ -435,6 +435,7 @@ export {
   R as render,
   q2 as useCallback,
   y2 as useEffect,
+  T2 as useMemo,
   A2 as useRef,
   d2 as useState
 };

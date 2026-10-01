@@ -1,5 +1,5 @@
 import { h } from '../vendor/vendor.ui.bundle.js';
-import { useEffect, useRef } from '../vendor/vendor.ui.bundle.js';
+import { useEffect, useMemo, useRef } from '../vendor/vendor.ui.bundle.js';
 import { htm } from '../vendor/vendor.ui.bundle.js';
 
 const html = htm.bind(h);
@@ -45,16 +45,10 @@ export default function DebouncedTextarea({
 	const commitRef = useRef(/** @type {() => void} */ (() => {}));
 
 	// Every opened file re-renders on each edit; only decode when content changes.
-	const decodedRef = useRef(
-		/** @type {{ content: Uint8Array, text: string } | null} */ (null),
+	const text = useMemo(
+		() => new TextDecoder().decode(file.content),
+		[file.content],
 	);
-	if (decodedRef.current?.content !== file.content) {
-		decodedRef.current = {
-			content: file.content,
-			text: new TextDecoder().decode(file.content),
-		};
-	}
-	const text = decodedRef.current.text;
 	const usesSyntaxFont =
 		syntaxHighlighted && text.length <= MAX_SYNTAX_HIGHLIGHTED_CHARACTERS;
 
