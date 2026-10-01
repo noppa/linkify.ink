@@ -121,7 +121,7 @@ test('full-page capture reproduces the rendered page', async ({ page }) => {
 
 	expect(capture.mode).toBe('full');
 	expect(capture.width).toBe(1280);
-	expect(capture.linkedImages).toBe(1);
+	expect(capture.html).toContain('src="https://example.invalid/never-loads.png"');
 	expect(capture.html).toContain('content="width=1280"');
 	expect(capture.html).toContain('<title>Capture fixture</title>');
 	// Nothing of the page's own machinery ships: no scripts, no stylesheets, no
@@ -193,7 +193,7 @@ test('full-page capture drops base64 images', async ({ page }) => {
 	const capture = await page.evaluate(() => globalThis.__linkifyInkCapture({ mode: 'full' }));
 
 	expect(capture.html).not.toContain('base64');
-	expect(capture.linkedImages).toBe(1);
+	expect(capture.html).toContain('src="https://example.invalid/linked.png"');
 	// The image keeps its alt text, and the other layers of a multi-layer
 	// background survive the one that was dropped.
 	expect(capture.html).toMatch(/<img[^>]*alt="inline logo"/);

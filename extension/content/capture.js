@@ -40,7 +40,6 @@
 	 *   textLength: number,
 	 *   readerable: boolean,
 	 *   mode: 'article' | 'full',
-	 *   linkedImages: number,
 	 *   width: number,
 	 * }} Capture
 	 */
@@ -110,11 +109,8 @@
 	 * Strip a parsed fragment down to safe, compact markup, in place.
 	 * @param {Element} root
 	 * @param {string} base page URL, for resolving relative links
-	 * @returns {{ linkedImages: number }}
 	 */
 	function sanitize(root, base) {
-		let linkedImages = 0;
-
 		// Snapshot first: the walk mutates the tree, and a live collection would
 		// skip nodes as siblings shift under it.
 		for (const el of Array.from(root.querySelectorAll('*'))) {
@@ -154,7 +150,6 @@
 				// reader still sees the article as written. The trade is that the capture
 				// needs the network, and rots when the host moves the file. That is the
 				// deal: a link carries the page, not an archive of it.
-				linkedImages++;
 				replaceAttrs(el, { src: absolute, alt });
 				continue;
 			}
@@ -195,8 +190,6 @@
 			if (!PRUNE_IF_EMPTY.has(tag)) continue;
 			if (el.children.length === 0 && !el.textContent?.trim()) el.remove();
 		}
-
-		return { linkedImages };
 	}
 
 	/**
@@ -1136,7 +1129,7 @@ ${body}
 	 * Snapshot the whole page as a computed-style capture; see the note at the top
 	 * of this section.
 	 * @param {string} base
-	 * @returns {Promise<{ html: string, linkedImages: number, width: number }>}
+	 * @returns {Promise<{ html: string, width: number }>}
 	 */
 	async function captureFull(base) {
 		const baseline = createBaseline();
@@ -1146,8 +1139,6 @@ ${body}
 		const pseudoStyles = [];
 		/** @type {Set<string>} */
 		const usedFamilies = new Set();
-		let linkedImages = 0;
-
 		// Fragment targets are the only ids worth carrying: a footnote's "back to
 		// text" link dead-ends without the id it points at, and every other id is
 		// weight the generated classes made redundant.
@@ -1276,7 +1267,6 @@ ${body}
 				const src = /** @type {HTMLImageElement} */ (el).currentSrc || el.getAttribute('src') || '';
 				const entry = attrs.find(([name]) => name === 'src');
 				if (/^https?:/i.test(src)) {
-					linkedImages++;
 					if (entry) entry[1] = src;
 					else attrs.push(['src', src]);
 				} else if (isBase64Image(src) || (entry && isBase64Image(entry[1]))) {
@@ -1359,7 +1349,7 @@ ${body}
 			`<title>${escapeHtml(document.title)}</title>` +
 			`<style>${css}</style></head>${renderChildren(root)}</html>`;
 
-		return { html, linkedImages, width };
+		return { html, width };
 	}
 
 	// ── Entry point ──────────────────────────────────────────────────────────────
@@ -1376,7 +1366,7 @@ ${body}
 		const readerable = LinkifyReadability.isProbablyReaderable(document);
 
 		if (mode === 'full') {
-			const { html, linkedImages, width } = await captureFull(base);
+			const { html, width } = await captureFull(base);
 			return {
 				html,
 				title: document.title,
@@ -1386,7 +1376,6 @@ ${body}
 				textLength: document.body?.textContent?.length ?? 0,
 				readerable,
 				mode,
-				linkedImages,
 				width,
 			};
 		}
@@ -1416,7 +1405,7 @@ ${body}
 		const root = holder.getElementById('linkify-root');
 		if (!root) throw new Error('Failed to parse the extracted content');
 
-		const { linkedImages } = sanitize(root, base);
+		sanitize(root, base);
 
 		const title = article.title || document.title;
 		const html = buildDocument({
@@ -1437,7 +1426,6 @@ ${body}
 			textLength: article.length ?? 0,
 			readerable,
 			mode,
-			linkedImages,
 			width: 0,
 		};
 	}

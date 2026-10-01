@@ -140,12 +140,6 @@ async function captureToLink(options) {
 		title: capture.title,
 		mode: capture.mode,
 		readerable: capture.readerable,
-		// Images always load from the original host. Embedding was tried and
-		// dropped: an image is already compressed, so every byte costs ~1.33
-		// characters of URL and a single photo outweighs the whole article. A link
-		// carries the page; anyone who wants a persistent archive wants a
-		// different tool.
-		linkedImages: capture.linkedImages,
 		// The viewport width a full capture was laid out at; 0 for article mode.
 		width: capture.width,
 	};
