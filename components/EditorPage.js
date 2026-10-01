@@ -389,6 +389,7 @@ export default function EditorPage() {
 						files=${files}
 						activeFile=${activeFile}
 						followActiveFile=${showSharedPreviewOnly}
+						fitToDeclaredWidth=${showSharedPreviewOnly && !readerFilesOpen}
 					/>
 				</div>
 			</div>

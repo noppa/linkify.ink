@@ -540,6 +540,37 @@ html, body {
 	min-height: 0;
 }
 
+/* A full-page capture on a phone: the app is laid out at the capture's desktop
+   width and the browser zooms out to fit (useFittedViewport in Preview.js). The
+   document scrolls instead of the frame, which is grown to the capture's height,
+   so pinch-zooming and panning work as on any desktop site rather than fighting
+   a scrolling frame inside a zoomed page. The reader bar is zoomed back up by
+   the same factor, so it keeps its usual size on screen. */
+html.capture-fit,
+html.capture-fit body,
+html.capture-fit #app {
+	height: auto;
+}
+
+html.capture-fit .app.shared-link-preview {
+	grid-template-rows: auto auto auto;
+	height: auto;
+	overflow: visible;
+}
+
+html.capture-fit .app.shared-link-preview .main {
+	grid-template-rows: auto;
+}
+
+html.capture-fit .reader-bar {
+	height: 32px;
+	zoom: var(--capture-scale);
+}
+
+html.capture-fit .preview-iframe {
+	flex: none;
+}
+
 .app.shared-link-preview:not(.reader-files-open) .sidebar,
 .app.shared-link-preview .mobile-tabs,
 .app.shared-link-preview .editor-panel,

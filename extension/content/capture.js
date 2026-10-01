@@ -369,7 +369,13 @@ ${body}
 		// a document's stray markup newlines collapse, and of `list-style-type` what
 		// makes list markers appear. Stating them on :root keeps the reset's meaning
 		// identical while making it explicit rather than accidental.
-		':root{white-space:normal;list-style:none;quotes:none}';
+		//
+		// text-size-adjust: a phone shows the capture zoomed out to fit its
+		// desktop width, and iOS Safari enlarges text that renders that small
+		// ("text autosizing"). Every box keeps its captured pixel size, so the
+		// enlarged text overflows its box and lines pile on top of each other.
+		':root{white-space:normal;list-style:none;quotes:none;' +
+		'-webkit-text-size-adjust:100%;text-size-adjust:100%}';
 
 	// The properties that make a page look like itself. Everything outside this
 	// list is dropped even where it differs from the baseline — writing modes,

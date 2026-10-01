@@ -90,6 +90,49 @@ function isPageAsset(file) {
 	return ['css', 'js', 'mjs', 'cjs'].includes(ext);
 }
 
+const DEVICE_VIEWPORT = 'width=device-width, initial-scale=1.0';
+
+/**
+ * Lay the whole app out at `width` CSS px and let the browser fit it to the
+ * screen, by declaring that width in the app's own viewport meta. Used for a
+ * full-page capture, which is laid out at the desktop width it was taken at and
+ * declares it. The capture's own declaration does nothing, as a viewport meta
+ * only applies to the top-level document, so the app makes it on the capture's
+ * behalf. The browser then zooms out and pinch-zooms the page natively, as it
+ * would any desktop site.
+ *
+ * Not a CSS `transform` or `zoom` inside the frame. Those were tried. A
+ * transform keeps a layer several times the screen's size that pinch-zooming
+ * re-rasterizes until iOS Safari runs out of memory and reloads the tab, and
+ * `zoom` shrinks the text far enough that Safari's text autosizing enlarges it
+ * again, past the pixel-sized boxes it has to fit in.
+ *
+ * Only a width wider than the screen applies, so desktops and wide tablets
+ * keep their normal layout.
+ *
+ * `--capture-scale` is how far the page ends up zoomed out, which the reader
+ * bar uses to keep its usual size on screen (styles.css).
+ * @param {number} width 0 to keep the device-width layout
+ * @returns {boolean} whether the layout is fitted
+ */
+function useFittedViewport(width) {
+	const fitted = width > screen.width;
+	useEffect(() => {
+		if (!fitted) return;
+		const meta = document.querySelector('meta[name="viewport"]');
+		const root = document.documentElement;
+		meta?.setAttribute('content', `width=${width}`);
+		root.classList.add('capture-fit');
+		root.style.setProperty('--capture-scale', String(width / screen.width));
+		return () => {
+			meta?.setAttribute('content', DEVICE_VIEWPORT);
+			root.classList.remove('capture-fit');
+			root.style.removeProperty('--capture-scale');
+		};
+	}, [fitted, width]);
+	return fitted;
+}
+
 const HOSTED_ORIGIN = 'linkify.ink';
 // Sandbox hosts are single-label subdomains (sandbox-<hash>.linkify.ink) so the
 // free *.linkify.ink Universal SSL cert covers them; a second-level wildcard like
@@ -143,11 +186,20 @@ export function resolvePreviewFile(files, activeFile, lastHtmlName = null) {
  *   files: FileEntry[],
  *   activeFile: FileEntry | null,
  *   followActiveFile?: boolean,
+ *   fitToDeclaredWidth?: boolean,
  * }} props — `followActiveFile` always previews the active file itself, even a
  *   stylesheet or script of an HTML page (the shared-link reader view, where
- *   picking a file means wanting to see it).
+ *   picking a file means wanting to see it). `fitToDeclaredWidth` lays the app
+ *   out at the width a fixed-width document declares, so a phone zooms out to
+ *   fit it (see useFittedViewport); only for a view where the preview is
+ *   the whole page.
  */
-export default function Preview({ files, activeFile, followActiveFile = false }) {
+export default function Preview({
+	files,
+	activeFile,
+	followActiveFile = false,
+	fitToDeclaredWidth = false,
+}) {
 	const iframeRef = useRef(/** @type {HTMLIFrameElement | null} */ (null));
 	const sandboxRef = useRef(/** @type {Sandbox | null} */ (null));
 	// Always-current file list, so the sandbox message handlers (which outlive a
@@ -188,6 +240,25 @@ export default function Preview({ files, activeFile, followActiveFile = false })
 		window.addEventListener('message', onSandboxReady);
 		return () => window.removeEventListener('message', onSandboxReady);
 	}, []);
+
+	// The declared width and content height the sandbox reports for each
+	// document it shows (see sandbox-loader.html); width 0 for one that declares
+	// none, such as every rendered markdown, text and image preview.
+	const [layout, setLayout] = useState({ width: 0, height: 0 });
+	useEffect(() => {
+		/** @param {MessageEvent} event */
+		function onContentLayout(event) {
+			if (event.data?.type !== 'content-layout') return;
+			if (event.origin !== sandboxRef.current?.origin) return;
+			const { width, height } = event.data;
+			setLayout((prev) =>
+				prev.width === width && prev.height === height ? prev : { width, height },
+			);
+		}
+		window.addEventListener('message', onContentLayout);
+		return () => window.removeEventListener('message', onContentLayout);
+	}, []);
+	const fitted = useFittedViewport(fitToDeclaredWidth ? layout.width : 0);
 
 	// Warm up the preview-only bundle in the background as soon as the preview
 	// mounts, so the first markdown render doesn't wait on a cold fetch.
@@ -249,6 +320,7 @@ export default function Preview({ files, activeFile, followActiveFile = false })
 			<iframe
 				ref=${iframeRef}
 				class="preview-iframe"
+				style=${fitted ? { height: `${layout.height}px` } : undefined}
 				sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
 				title="File preview"
 			></iframe>

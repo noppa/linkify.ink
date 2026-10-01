@@ -114,9 +114,67 @@
 					frame = document.createElement('iframe');
 					frame.id = 'content';
 					frame.setAttribute('sandbox', CONTENT_SANDBOX);
+					frame.addEventListener('load', watchLayout);
 					document.body.appendChild(frame);
 				}
 				frame.src = src || '/' + pendingEntry + '?__preview=' + ++renderCount + '&__session=' + SESSION;
+			}
+
+			// ── Declared layout width ──
+
+			// The width the entry document asks to be laid out at, from a numeric
+			// `<meta name="viewport" content="width=…">`; 0 when it declares none. A
+			// full-page capture declares the desktop width it was taken at, so a phone
+			// can lay it out that wide and zoom out to fit. A viewport meta only
+			// applies to a top-level document, though, and this one is two frames
+			// deep. So the loader reports the width, and the content's height, to the
+			// app, which applies the width to its own viewport and grows this frame
+			// to the content's height: the browser then zooms the whole page natively,
+			// as it would any desktop site (see Preview.js).
+			let declaredWidth = 0;
+			let sizeObserver = null;
+
+			/** @param {Uint8Array | undefined} bytes */
+			function readDeclaredWidth(bytes) {
+				if (!bytes) return 0;
+				const source = new TextDecoder().decode(bytes);
+				const bodyStart = source.search(/<body[\s>]/i);
+				const head = bodyStart === -1 ? source : source.slice(0, bodyStart);
+				const doc = new DOMParser().parseFromString(head, 'text/html');
+				const content = doc.querySelector('meta[name="viewport" i]')?.getAttribute('content') ?? '';
+				const match = /(?:^|[,;\s])width\s*=\s*(\d+(?:\.\d+)?)/i.exec(content);
+				return match ? Number(match[1]) : 0;
+			}
+
+			/** @param {number} height */
+			function reportLayout(height) {
+				window.parent.postMessage(
+					{ type: 'content-layout', width: declaredWidth, height },
+					PARENT_ORIGIN,
+				);
+			}
+
+			// Each render reports again once loaded: the height, for a fixed-width
+			// document, and otherwise width 0, which tells the app to stop fitting.
+			// Images and webfonts keep changing the height after load, so it is
+			// watched for as long as the document is shown.
+			function watchLayout() {
+				sizeObserver?.disconnect();
+				sizeObserver = null;
+				const doc = document.getElementById('content')?.contentDocument;
+				if (!declaredWidth || !doc?.body) {
+					reportLayout(0);
+					return;
+				}
+				// Not documentElement.scrollHeight: that is never less than the frame's
+				// own height, so once the app grew the frame it could never shrink.
+				const measure = () => reportLayout(Math.ceil(Math.max(
+					doc.documentElement.getBoundingClientRect().height,
+					doc.body.scrollHeight,
+				)));
+				sizeObserver = new ResizeObserver(measure);
+				sizeObserver.observe(doc.documentElement);
+				sizeObserver.observe(doc.body);
 			}
 
 			// ── Fallback rendering, for browsers that won't run the service worker ──
@@ -211,6 +269,9 @@
 				if (event.origin !== PARENT_ORIGIN) return;
 				if (!event.data || event.data.type !== 'files') return;
 				pendingEntry = event.data.entry || 'index.html';
+				const entryName = normalizeName(pendingEntry);
+				const entryKey = Object.keys(event.data.files).find((name) => normalizeName(name) === entryName);
+				declaredWidth = entryKey ? readDeclaredWidth(event.data.files[entryKey]) : 0;
 				if (!serviceWorkerReady) {
 					renderWithBlobUrls(event.data.files);
 					return;
