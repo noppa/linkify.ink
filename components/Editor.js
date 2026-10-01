@@ -15,45 +15,65 @@ const MIN_DIMENSION = 16;
 /** @typedef {import('../lib/types.js').FileEntry} FileEntry */
 
 /**
+ * Every text file opened so far keeps its own textarea mounted (hidden while
+ * another file is active), so the browser's native undo history survives
+ * switching between files.
+ *
  * @param {{
- *   file: FileEntry | null,
- *   onChange: (content: Uint8Array) => void,
- *   onReplace?: (file: FileEntry) => void,
+ *   files: FileEntry[],
+ *   activeIndex: number,
+ *   onChange: (index: number, content: Uint8Array) => void,
+ *   onReplace?: (index: number, file: FileEntry) => void,
  * }} props
  */
-export default function Editor({ file, onChange, onReplace }) {
+export default function Editor({ files, activeIndex, onChange, onReplace }) {
+	// Names of text files opened at least once. Deleted files drop out on their
+	// own because we only render names still present in `files`.
+	const openedRef = useRef(/** @type {Set<string>} */ (new Set()));
+	const file = files[activeIndex] ?? null;
+	const isText = !!file && isTextFile(file);
+	if (file && isText) openedRef.current.add(file.name);
+
+	const textareas = files.map((f, index) =>
+		openedRef.current.has(f.name) && isTextFile(f)
+			? html`<${DebouncedTextarea}
+					key=${f.name}
+					file=${f}
+					hidden=${index !== activeIndex}
+					onChange=${(content) => onChange(index, content)}
+					syntaxHighlighted=${isCodeFile(f)}
+				/>`
+			: null,
+	);
+
+	let header = html`<${Icon} name="code" /> editor`;
+	let content = null;
 	if (!file) {
-		return html`
-			<div class="panel editor-panel">
-				<div class="panel-header"><${Icon} name="code" /> editor</div>
-				<div class="editor-body editor-empty">
-					<p>Add a file to start editing.</p>
+		content = html`<div class="editor-body editor-empty">
+			<p>Add a file to start editing.</p>
+		</div>`;
+	} else if (isImageFile(file)) {
+		header = html`<${Icon} name="image" /> ${file.name}`;
+		content = html`<${ImageViewer}
+			file=${file}
+			onReplace=${onReplace && ((newFile) => onReplace(activeIndex, newFile))}
+		/>`;
+	} else {
+		header = html`<${Icon} name="code" /> ${file.name}`;
+		if (!isText) {
+			content = html`<div class="editor-body">
+				<div class="editor-binary-notice">
+					Binary file — not editable as text
 				</div>
-			</div>
-		`;
+			</div>`;
+		}
 	}
-
-	if (isImageFile(file)) {
-		return html`<${ImageViewer} file=${file} onReplace=${onReplace} />`;
-	}
-
-	const isText = isTextFile(file);
 
 	return html`
 		<div class="panel editor-panel">
-			<div class="panel-header"><${Icon} name="code" /> ${file.name}</div>
-			<div class="editor-body">
-				${isText
-					? html`<${DebouncedTextarea}
-							key=${file.name}
-							file=${file}
-							onChange=${onChange}
-							syntaxHighlighted=${isCodeFile(file)}
-						/>`
-					: html`<div class="editor-binary-notice">
-							Binary file — not editable as text
-						</div>`}
-			</div>
+			<div class="panel-header">${header}</div>
+			${content}
+			<div class="editor-body" hidden=${!isText}>${textareas}</div>
 		</div>
 	`;
 }
@@ -147,61 +167,58 @@ function ImageViewer({ file, onReplace }) {
 	const canConvertToWebp = sourceType !== 'image/webp';
 
 	return html`
-		<div class="panel editor-panel">
-			<div class="panel-header"><${Icon} name="image" /> ${file.name}</div>
-			<div class="editor-image-viewer">
-				${blobUrl &&
-				html`<img
-					src=${blobUrl}
-					alt=${file.name}
-					class="editor-image"
-					onLoad=${(e) =>
-						setDims({
-							width: e.target.naturalWidth,
-							height: e.target.naturalHeight,
-						})}
-				/>`}
-				${onReplace &&
-				html`
-					<div class="editor-image-actions">
+		<div class="editor-image-viewer">
+			${blobUrl &&
+			html`<img
+				src=${blobUrl}
+				alt=${file.name}
+				class="editor-image"
+				onLoad=${(e) =>
+					setDims({
+						width: e.target.naturalWidth,
+						height: e.target.naturalHeight,
+					})}
+			/>`}
+			${onReplace &&
+			html`
+				<div class="editor-image-actions">
+					<button
+						class="btn"
+						onClick=${downscale}
+						disabled=${processing || !canDownscale}
+						title="Shrink the image to 75% of its current size"
+					>
+						${processing ? 'Working…' : 'Downscale'}
+					</button>
+					${scale < 1 &&
+					html`<span
+						class="editor-image-hint"
+						title=${`Downscaled to ${Math.round(scale * 100)}% of the original`}
+						>${Math.round(scale * 100)}%</span
+					>`}
+					<button
+						class="btn"
+						onClick=${restoreOriginal}
+						disabled=${processing || !canRestore}
+						title="Restore the image as it was before any edits"
+					>
+						Restore original
+					</button>
+					${canConvertToWebp &&
+					html`
 						<button
 							class="btn"
-							onClick=${downscale}
-							disabled=${processing || !canDownscale}
-							title="Shrink the image to 75% of its current size"
+							onClick=${convertToWebp}
+							disabled=${processing || convertFailed}
+							title=${convertFailed
+								? "This browser can't encode WebP images"
+								: undefined}
 						>
-							${processing ? 'Working…' : 'Downscale'}
+							Convert to WebP
 						</button>
-						${scale < 1 &&
-						html`<span
-							class="editor-image-hint"
-							title=${`Downscaled to ${Math.round(scale * 100)}% of the original`}
-							>${Math.round(scale * 100)}%</span
-						>`}
-						<button
-							class="btn"
-							onClick=${restoreOriginal}
-							disabled=${processing || !canRestore}
-							title="Restore the image as it was before any edits"
-						>
-							Restore original
-						</button>
-						${canConvertToWebp &&
-						html`
-							<button
-								class="btn"
-								onClick=${convertToWebp}
-								disabled=${processing || convertFailed}
-								title=${convertFailed
-									? "This browser can't encode WebP images"
-									: undefined}
-							>
-								Convert to WebP
-							</button>
-						`}
-					</div>
-				`}
-			</div>
+					`}
+				</div>
+			`}
 		</div>
 	`;
 }

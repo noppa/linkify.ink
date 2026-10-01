@@ -1,5 +1,5 @@
 import { h } from '../vendor/vendor.ui.bundle.js';
-import { useEffect, useRef } from '../vendor/vendor.ui.bundle.js';
+import { useEffect, useMemo, useRef } from '../vendor/vendor.ui.bundle.js';
 import { htm } from '../vendor/vendor.ui.bundle.js';
 
 const html = htm.bind(h);
@@ -16,13 +16,15 @@ const MAX_SYNTAX_HIGHLIGHTED_CHARACTERS = 10_000;
  * and everything it renders, including Preview — from re-rendering on every
  * keypress.
  *
- * Keyed by file name in the parent, so switching files remounts this with the
- * new content; the unmount flush below commits any buffered edit to the
- * outgoing file first, so nothing is lost on switch.
+ * Keyed by file name in the parent, which keeps one mounted (and merely
+ * hidden) per opened file so the browser's undo history survives switching
+ * files. The unmount flush below commits any buffered edit when the file is
+ * removed or renamed, so nothing is lost.
  *
  * @param {{
  *   file: FileEntry,
  *   onChange: (content: Uint8Array) => void,
+ *   hidden?: boolean,
  *   syntaxHighlighted?: boolean,
  *   delay?: number,
  * }} props
@@ -30,6 +32,7 @@ const MAX_SYNTAX_HIGHLIGHTED_CHARACTERS = 10_000;
 export default function DebouncedTextarea({
 	file,
 	onChange,
+	hidden = false,
 	syntaxHighlighted = false,
 	delay = 600,
 }) {
@@ -41,7 +44,11 @@ export default function DebouncedTextarea({
 	// textarea value through the current onChange without re-subscribing effects.
 	const commitRef = useRef(/** @type {() => void} */ (() => {}));
 
-	const text = new TextDecoder().decode(file.content);
+	// Every opened file re-renders on each edit; only decode when content changes.
+	const text = useMemo(
+		() => new TextDecoder().decode(file.content),
+		[file.content],
+	);
 	const usesSyntaxFont =
 		syntaxHighlighted && text.length <= MAX_SYNTAX_HIGHLIGHTED_CHARACTERS;
 
@@ -62,7 +69,9 @@ export default function DebouncedTextarea({
 				textarea.value.length <= MAX_SYNTAX_HIGHLIGHTED_CHARACTERS,
 		);
 		if (timerRef.current !== null) clearTimeout(timerRef.current);
-		timerRef.current = setTimeout(commit, delay);
+		// Go through commitRef so a late flush uses the latest onChange, whose
+		// file index may have shifted since (e.g. another file was deleted).
+		timerRef.current = setTimeout(() => commitRef.current(), delay);
 	}
 
 	// Re-sync if the file's content changes underneath us (e.g. a shared link
@@ -73,13 +82,14 @@ export default function DebouncedTextarea({
 		if (el && el.value !== text) el.value = text;
 	}, [text]);
 
-	// Flush any buffered edit before this textarea unmounts (switching files).
+	// Flush any buffered edit before this textarea unmounts (file removed/renamed).
 	useEffect(() => () => commitRef.current(), []);
 
 	return html`<textarea
 		ref=${ref}
 		class="editor-textarea${usesSyntaxFont ? ' syntax-highlighted' : ''}"
 		defaultValue=${text}
+		hidden=${hidden}
 		onInput=${handleInput}
 		onBlur=${commit}
 		spellcheck=${false}

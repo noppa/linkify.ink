@@ -16,7 +16,7 @@ test.describe('editor page', () => {
 	test('uses the syntax-highlighting font only for code files', async ({ page }) => {
 		await page.goto('/');
 
-		const editor = page.locator('textarea.editor-textarea');
+		const editor = page.locator('textarea.editor-textarea:visible');
 		await expect(editor).toBeVisible();
 		await expect(editor).not.toHaveClass(/syntax-highlighted/);
 		await expect(editor).not.toHaveCSS(
@@ -76,7 +76,7 @@ test.describe('editor page', () => {
 		await expect(page.locator('.editor-textarea')).toHaveValue(/Hello, world!/);
 		await page.locator('.file-item', { hasText: 'script.js' }).click();
 
-		const editor = page.locator('textarea.editor-textarea');
+		const editor = page.locator('textarea.editor-textarea:visible');
 		await editor.fill('a'.repeat(10_000));
 		await expect(editor).toHaveClass(/syntax-highlighted/);
 
@@ -155,6 +155,30 @@ test.describe('editor page', () => {
 		).toBeVisible();
 	});
 
+	test('keeps native undo history when switching between files', async ({ page }) => {
+		await page.goto('/');
+		await page.getByRole('button', { name: 'Toggle sidebar' }).click();
+		await page.locator('#starter-select').selectOption('webpage');
+		const editor = page.locator('.editor-textarea:visible');
+		// Type only once the starter is in the editor, or it can land over the edit.
+		await expect(editor).toHaveValue(/Hello, world!/);
+		const original = await editor.inputValue();
+
+		await editor.click();
+		await page.keyboard.press('ControlOrMeta+End');
+		await page.keyboard.type('<!-- edited -->');
+		await expect(editor).toHaveValue(/edited/);
+
+		await page.locator('.file-item', { hasText: 'style.css' }).click();
+		await expect(page.locator('.editor-panel .panel-header')).toContainText('style.css');
+		await page.locator('.file-item', { hasText: 'index.html' }).click();
+		await expect(editor).toHaveValue(/edited/);
+
+		await editor.focus();
+		await page.keyboard.press('ControlOrMeta+z');
+		await expect(editor).toHaveValue(original);
+	});
+
 	test('renders Mermaid diagrams in Markdown and standalone files', async ({
 		page,
 	}) => {
@@ -189,9 +213,9 @@ test.describe('editor page', () => {
 			'flow.mmd',
 		);
 		await page
-			.locator('.editor-textarea')
+			.locator('.editor-textarea:visible')
 			.fill('sequenceDiagram\n  Alice->>Bob: Hello');
-		await page.locator('.editor-textarea').blur();
+		await page.locator('.editor-textarea:visible').blur();
 
 		await expect(page.locator('.panel-header', { hasText: 'flow.mmd' })).toHaveCount(
 			2,

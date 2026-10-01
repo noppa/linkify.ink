@@ -373,9 +373,10 @@ export default function EditorPage() {
 						</button>
 					</div>
 					<${Editor}
-						file=${activeFile}
-						onChange=${(content) => updateFile(activeIndex, content)}
-						onReplace=${(newFile) => replaceFile(activeIndex, newFile)}
+						files=${files}
+						activeIndex=${activeIndex}
+						onChange=${updateFile}
+						onReplace=${replaceFile}
 					/>
 					<div
 						class="divider-handle"
