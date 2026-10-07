@@ -16,6 +16,9 @@ node demo/scrape-compress/snapshot.mjs         # eyeball  → out/side-by-side.p
 # formats and dictionaries → out/encoding-report.md
 npm install --no-save --prefix demo/scrape-compress/.npm-staging html2pug@4 pug@3
 node demo/scrape-compress/encoding-test.mjs
+
+# Pug vs HTML on the shipped capture, with the v2 dictionary → out/pug-report.md
+node demo/scrape-compress/pug-test.mjs
 ```
 
 ## The problem
@@ -56,7 +59,7 @@ sketch at all.
 | [OptiCSS](https://github.com/linkedin/opticss) | Step 4, done properly. Its `mergeDeclarations` pass finds declarations shared across rules, factors them into new classes, and rewrites the markup to match. | A Node build-time tool over PostCSS ASTs, given static template analysis. Not something to run in a content script. |
 | [StyleX](https://stylexjs.com/), Tailwind, Atomizer | Step 4's opposite corner: one declaration per class, dedupe by construction. | As the original note guessed — the markup pays for it. Measured below: atomic is the *worst* of the four strategies. |
 | [rrweb](https://github.com/rrweb-io/rrweb) | Step 5: a compact non-HTML DOM serialization with a decoder at the other end. | Optimised for incremental mutation replay, not for one-shot size. |
-| [Pug](https://pugjs.org/) via [html2pug](https://github.com/donpark/html2pug) | Step 5 off the shelf, and it genuinely works: real Pug out, HTML back in, 0.0% pixel diff, 4–5% smaller links. | It is a Turing-complete template engine. `pug.render` on a link's payload is arbitrary code execution in the preview origin. Rejected on that, not on size. |
+| [Pug](https://pugjs.org/) via [html2pug](https://github.com/donpark/html2pug) | Step 5 off the shelf, and it genuinely works: real Pug out, HTML back in, 0.0% pixel diff, 4–5% smaller links. | It is a Turing-complete template engine. `pug.render` on a link's payload is arbitrary code execution in the preview origin. Rejected on that at first; [re-measured below](#pug-re-measured-with-the-shipped-capture-and-dictionary): the security argument doesn't hold, but with the v2 dictionary the saving is 2–4% on full captures and about nothing on articles. |
 | [zstd dictionaries](https://github.com/facebook/zstd#the-case-for-small-data-compression) | Not in the original sketch, and the largest single lever found: 9–31% off every link. The vendored `@bokuweb/zstd-wasm` already exports `compressUsingDict`. | Needs a versioned dictionary that can never be retired without breaking old links. |
 
 So the pieces exist separately; the combination — computed styles rebuilt into a
@@ -178,18 +181,67 @@ So the format is worth a real **5–7%**, and **Pug gets most of it off the shel
 — `html2pug` produces genuine Pug (`h2.a.b.c Heading 1`, closing tags dropped)
 and `pug.render` takes it back to HTML that renders identically.
 
-**Pug should still be rejected, on security rather than size.** Pug is a
-Turing-complete template engine, and these payloads are untrusted by definition:
+**This first rejected Pug on security, but that argument doesn't hold.** Pug is
+a Turing-complete template engine, and these payloads are untrusted by definition:
 
 ```
 $ node -e "pug.render(\"- globalThis.__PWNED = 'yes'\np= 1+1\")"
 __PWNED = yes
 ```
 
-Compiling a link's payload with Pug is arbitrary code execution in the preview
-origin, which defeats the point of the sandbox's `nojs` default. The bespoke
-s-expression decoder is ~40 lines with no `eval`, saves slightly more, and adds
-23 MB less to the preview bundle.
+That would matter if Pug compiled in the app's origin. But previewed documents
+already run their own scripts (see `components/Preview.js`): the isolation is
+the separate sandbox origin, and there is no no-JS mode. A link can already put
+a `<script>` in its HTML, so compiling its Pug inside the sandbox grants nothing
+new. The `nojs` default this paragraph used to cite doesn't exist. Pug is safe
+as long as it only ever compiles in the sandbox, never in the editor, the
+receive page or the extension.
+
+So the real question is size, re-measured below against what ships now.
+
+### Pug, re-measured with the shipped capture and dictionary
+
+The table above measured the demo `capture.js` through plain zstd-19. Two things
+have changed since: the extension ships its own capture, and every link is
+compressed with the shared v2 dictionary (`dictionaries/`). `pug-test.mjs` runs
+`extension/content/capture.js` in both modes over the fixtures at ×1 and ×4
+content, converts each capture with `html2pug`, and prices both through the real
+`LinkifyInk.createLink` (each link decoded again to prove it works). Every Pug
+payload compiles back to HTML that renders the same: 0.0% pixel diff on full
+captures, at most 0.4% on articles.
+
+| fixture | scale | mode | HTML | Pug | | Pug, tab indent | | no dict: HTML → Pug |
+| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| bootstrap-dashboard | ×1 | full | 7,211 | 6,999 | −2.9% | 6,931 | −3.9% | −3.7% |
+| bulma-landing | ×1 | full | 5,265 | 5,105 | −3.0% | 5,088 | −3.4% | −3.9% |
+| pico-docs | ×1 | full | 4,513 | 4,329 | −4.1% | 4,336 | −3.9% | −4.9% |
+| markdown-article | ×1 | full | 3,333 | 3,275 | −1.7% | 3,268 | −2.0% | −3.8% |
+| utility-app | ×1 | full | 2,947 | 2,873 | −2.5% | 2,871 | −2.6% | −4.5% |
+| bootstrap-dashboard | ×4 | full | 11,633 | 11,364 | −2.3% | 11,167 | −4.0% | −1.8% |
+| bootstrap-dashboard | ×1 | article | 1,748 | 1,743 | −0.3% | 1,719 | −1.7% | −4.4% |
+| bulma-landing | ×1 | article | 1,340 | 1,344 | +0.3% | 1,349 | +0.7% | −3.6% |
+| pico-docs | ×1 | article | 2,171 | 2,129 | −1.9% | 2,097 | −3.4% | −6.0% |
+| markdown-article | ×1 | article | 2,052 | 2,096 | +2.1% | 2,067 | +0.7% | −2.8% |
+| utility-app | ×1 | article | 1,479 | 1,475 | −0.3% | 1,464 | −1.0% | −4.5% |
+
+*link characters, format 2 (v2 dictionary) unless noted; all 20 rows in `out/pug-report.md`*
+
+- **Full captures: 2–4% smaller**, 60–470 characters. With tab indentation
+  (`html2pug --tabs`) it's consistently 2.0–4.0% across all ten full rows.
+- **Articles: about nothing.** The median is −0.4% (−1.8% with tabs), and two
+  of the ten come out larger. The dictionary already holds plenty of HTML, so
+  the tags Pug drops were mostly free already. Without the dictionary Pug saves
+  2–6% on the same articles. The dictionary absorbs most of that.
+- **Cost:** the Pug compiler bundles to ~890 KB minified (~220 KB gzipped),
+  mostly the Babel parser it compiles templates with. That's about a quarter
+  the size of the whole 3.7 MB preview bundle. It also
+  needs a new preview path (serve `.pug` as compiled HTML in the sandbox), and
+  the tar holds a `.pug` file, so "download the files" hands the recipient a
+  Pug template instead of a page.
+
+A 2–4% saving on full captures doesn't pay for those costs, and articles gain
+about nothing. A trained capture dictionary (−19–31% above, as a v3 format)
+is the larger lever by an order of magnitude.
 
 ### Dictionaries beat formats by 3–5×
 
