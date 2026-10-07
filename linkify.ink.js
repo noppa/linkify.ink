@@ -69,6 +69,12 @@ const FORMAT_VERSION = 2;
 const FORMAT_PLAIN = 1;
 const BLOCK = 512;
 
+// zstd's wasm module is process-wide: init() replaces its memory, which would
+// strand the compression contexts and buffers of every instance already using it.
+// So each zstd module is initialized once, however many instances share it.
+/** @type {WeakMap<ZstdModule, Promise<void>>} */
+const zstdInits = new WeakMap();
+
 export class LinkifyInk {
 	/** No encryption — anyone with the link can read it. */
 	static ENC_NONE = 0x00;
@@ -344,9 +350,16 @@ export class LinkifyInk {
 				const response = await fetch(argon2WasmUrl);
 				return new Uint8Array(await response.arrayBuffer());
 			};
-			this.#initPromise = Promise.resolve(
-				this.#zstd.init(this.#zstdWasmUrl),
-			).then(() => undefined);
+			let zstdInit = zstdInits.get(this.#zstd);
+			if (!zstdInit) {
+				zstdInit = Promise.resolve(this.#zstd.init(this.#zstdWasmUrl)).then(
+					() => undefined,
+				);
+				// A failed init (a flaky network) is retried by the next instance.
+				zstdInit.catch(() => zstdInits.delete(this.#zstd));
+				zstdInits.set(this.#zstd, zstdInit);
+			}
+			this.#initPromise = zstdInit;
 		}
 		return this.#initPromise;
 	}

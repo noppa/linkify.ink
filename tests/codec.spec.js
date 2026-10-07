@@ -127,3 +127,32 @@ test.describe('shared dictionary', () => {
 		expect(digest).toBe('84b92dfee4d5a8b1a41878e9a3c5dc470424d729c78ac47a1778c1e04a2cba80');
 	});
 });
+
+test('instances sharing one zstd module do not break each other', async ({ page }) => {
+	// zstd's wasm module is a process-wide singleton. A second instance must not
+	// re-initialize it under the first one, whose compression contexts live in it.
+	await page.goto('/about');
+	const result = await page.evaluate(async () => {
+		const { linkifyInkCodecDependencies } = await import('/vendor/vendor.codec.bundle.js');
+		const { LinkifyInk } = await import('/linkify.ink.js');
+		const text = 'Two instances, one zstd. '.repeat(20);
+		const files = [{ name: 'a.txt', data: new TextEncoder().encode(text) }];
+		/** @param {{ files: { data: Uint8Array }[] }} read */
+		const same = (read) => new TextDecoder().decode(read.files[0].data) === text;
+
+		const first = new LinkifyInk(linkifyInkCodecDependencies);
+		const before = await first.createLink(files);
+		const second = new LinkifyInk(linkifyInkCodecDependencies);
+		const fromSecond = await second.createLink(files);
+		const after = await first.createLink(files);
+		return {
+			links: [before === after, fromSecond === after],
+			roundTrips: [
+				same(await first.readLink(before)),
+				same(await first.readLink(fromSecond)),
+				same(await second.readLink(after)),
+			],
+		};
+	});
+	expect(result).toEqual({ links: [true, true], roundTrips: [true, true, true] });
+});
