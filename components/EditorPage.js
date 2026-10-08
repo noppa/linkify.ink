@@ -38,7 +38,7 @@ function openingIndex(files) {
 export default function EditorPage() {
 	// Captured once on mount: whether these files arrived via a shared link (URL
 	// hash, or handed off from ReceivePage), before takePendingFiles() consumes
-	// the hand-off slot and the hash effect below clears the URL hash.
+	// the hand-off slot.
 	const [initial] = useState(() => {
 		const pending = takePendingFiles();
 		const cameFromSharedLink =
@@ -84,7 +84,8 @@ export default function EditorPage() {
 		!initial.cameFromSharedLink && isDefaultReadmeOnly(initial.files),
 	);
 
-	// Decode files from URL hash on first load
+	// Decode files from URL hash on first load. The hash stays in the URL so a
+	// refresh reopens the same shared link.
 	useEffect(() => {
 		const hash = window.location.hash;
 		if (!hash || hash.length <= 1) return;
@@ -95,12 +96,10 @@ export default function EditorPage() {
 			return;
 		}
 		if (encType === LinkifyInk.ENC_PASSWORD) {
-			// Password-encrypted: clear the hash from the URL and prompt before decoding
-			window.history.replaceState(null, '', window.location.pathname);
+			// Password-encrypted: prompt before decoding
 			setHashPending(hash);
 			return;
 		}
-		window.history.replaceState(null, '', window.location.pathname);
 		linkify.readLink(hash)
 			.then(({ files: decoded }) => {
 				const entries = decoded.map((f) => ({

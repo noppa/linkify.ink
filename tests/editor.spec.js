@@ -372,4 +372,23 @@ test.describe('editor page', () => {
 		await expect(page.locator('.reader-file-name')).toHaveText('style.css');
 		await expect(preview.locator('.code-preview code.hljs')).toContainText('margin');
 	});
+
+	test('reloading a shared link keeps the shared files open', async ({ page }) => {
+		await page.goto('/about');
+		const sharedUrl = await page.evaluate(async () => {
+			const { linkify } = await import('/lib/linkify.js');
+			return linkify.createLink([
+				{ name: 'index.html', data: new TextEncoder().encode('<h1>Still here</h1>') },
+			]);
+		});
+		const sharedHash = new URL(sharedUrl).hash;
+		await page.goto(`/${sharedHash}`);
+		await expect(page.locator('.reader-file-name')).toHaveText('index.html');
+
+		await page.reload();
+		expect(new URL(page.url()).hash).toBe(sharedHash);
+		await expect(page.locator('.reader-file-name')).toHaveText('index.html');
+		const preview = page.frameLocator('.preview-iframe').frameLocator('#content');
+		await expect(preview.locator('h1')).toHaveText('Still here');
+	});
 });
