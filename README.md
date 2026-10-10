@@ -97,6 +97,8 @@ for (const f of files) {
 
 To password-protect a link, pass `{ encryption: 'password', password }` as the second argument to `createLink`, and `{ password }` to `readLink`. To find out what a link needs before decoding it, call `linkify.peekEncryptionType(link)`. It returns `LinkifyInk.ENC_NONE`, `ENC_PASSWORD` (pass `{ password }`) or `ENC_ECDH` (pass `{ privateKey }`, the recipient's key).
 
+[`/llms.txt`](https://linkify.ink/llms.txt) describes the same API for LLMs and agents, with ready-to-run command-line snippets.
+
 ## Design goals
 
 - **No server-side state.** The hash fragment never leaves the browser, so the service has nothing to store, leak, or take down. A shared link works as long as the static site is up, and the decoding logic is simple enough to reimplement if it isn't.
