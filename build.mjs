@@ -16,6 +16,10 @@ const entries = [
 	'app.js',
 	'styles.css',
 	'favicon.ico',
+	// Served as a static asset by the site worker, so crawlers and agents get the
+	// text itself rather than the SPA shell (not_found_handling would serve
+	// index.html for it otherwise).
+	'llms.txt',
 	'vendor/vendor.ui.bundle.js',
 	'vendor/vendor.preview.bundle.js',
 	'vendor/vendor.codec.bundle.js',

@@ -1,0 +1,130 @@
+# linkify.ink
+
+> linkify.ink shares files without uploading them anywhere. It packs files into a compressed, optionally encrypted payload and encodes the whole thing into the fragment of a URL (`https://linkify.ink/#<payload>`). There is no server-side storage, no account and no expiry: the link is the file. Browsers never send the part after `#` to the server, so linkify.ink never sees the contents. The codec is a dependency-free JavaScript library that also runs outside the browser (Node 20+, Deno, Bun), so scripts and command-line agents can create and read links without a browser.
+
+## What a link is
+
+```
+files → tar → zstd + shared dictionary → [encrypt] → base64url → https://linkify.ink/#<payload>
+```
+
+- Any files work: text, images, binaries. Each file is `{ name, data }`, with `data` a `Uint8Array`.
+- Three encryption modes:
+  - **none**: anyone with the link can read it.
+  - **password**: AES-256-GCM with a key derived by Argon2id (64 MiB, 3 iterations). Anyone with the link can guess passwords offline, so use a long one.
+  - **ecdh**: encrypted to a recipient's P-256 public key. The recipient generates a keypair on https://linkify.ink/receive (or with the library) and shares the public key, a base64url string of 87 characters. Only the holder of the private key can decrypt.
+- Size: keep links under about 32,000 characters (roughly 24 KB of compressed data). Text compresses well; images and other already-compressed files don't. Chat apps often cut long links earlier. A payload too long for a clickable link can be sent as text and pasted into https://linkify.ink/receive.
+- Opening a link in a browser shows the files in an editor with a live preview (Markdown, images, and multi-file HTML/CSS/JS apps run in a sandboxed origin).
+- For a public link, whoever holds the URL holds the files. Use password or ecdh mode for anything private.
+
+## Getting the library
+
+Two plain ES modules, no build step and no other dependencies:
+
+- `linkify.ink.js`: the codec. It imports nothing; it exports one class, `LinkifyInk`.
+- `vendor/vendor.codec.bundle.js`: zstd and Argon2 (WASM inlined as data URLs) plus the shared compression dictionary, exported as `linkifyInkCodecDependencies`.
+
+```sh
+curl -s -o linkify.ink.mjs         https://linkify.ink/linkify.ink.js
+curl -s -o vendor.codec.bundle.mjs https://linkify.ink/vendor/vendor.codec.bundle.js
+```
+
+The same files are at `https://raw.githubusercontent.com/noppa/linkify.ink/main/linkify.ink.js` and `https://raw.githubusercontent.com/noppa/linkify.ink/main/vendor/vendor.codec.bundle.js`. Saving them as `.mjs` tells Node they are ES modules. The library needs a runtime with WebCrypto, `fetch()` (for `data:` URLs), `TextEncoder` and `atob`/`btoa`; in Node that means version 20 or newer.
+
+## Using it as a JS library
+
+```js
+import { linkifyInkCodecDependencies } from './vendor.codec.bundle.mjs';
+import { LinkifyInk } from './linkify.ink.mjs';
+
+const linkify = new LinkifyInk(linkifyInkCodecDependencies);
+
+// Encode
+const link = await linkify.createLink([
+	{ name: 'notes.md', data: new TextEncoder().encode('# hello') },
+]);
+// → 'https://linkify.ink/#AgAC...'
+
+// Decode: pass the whole URL, or just the fragment with or without '#'
+const { files, metadata } = await linkify.readLink(link);
+for (const f of files) console.log(f.name, new TextDecoder().decode(f.data));
+```
+
+Password mode:
+
+```js
+const link = await linkify.createLink(files, { encryption: 'password', password: 'a long passphrase' });
+const { files } = await linkify.readLink(link, { password: 'a long passphrase' });
+```
+
+Recipient-key (ECDH) mode:
+
+```js
+// Recipient: make a keypair, share the public key string, keep the private key.
+const { publicKey, privateKey } = await linkify.generateKeypair();
+const publicKeyString = LinkifyInk.base64UrlEncode(await linkify.exportPublicKey(publicKey));
+
+// Sender: encrypt to that public key string (e.g. one copied from linkify.ink/receive).
+const link = await linkify.createLink(files, {
+	encryption: 'ecdh',
+	recipientPublicKey: LinkifyInk.base64UrlDecode(publicKeyString),
+});
+
+// Recipient: decrypt with the private key (a WebCrypto CryptoKey).
+const { files } = await linkify.readLink(link, { privateKey });
+```
+
+### API
+
+- `new LinkifyInk(deps)`: `deps` is `linkifyInkCodecDependencies`. Spread it to override fields, e.g. `{ ...linkifyInkCodecDependencies, origin: 'http://localhost:8080' }` changes the origin of created links (default `https://linkify.ink`).
+- `createLink(files, options?) → Promise<string>`. Options: `encryption` (`'none'` default, `'password'`, `'ecdh'`), `password`, `recipientPublicKey` (raw 65-byte `Uint8Array`), `metadata` (a small JSON object stored with the files, e.g. `{ preview: 'index.html' }`).
+- `readLink(urlOrFragment, options?) → Promise<{ files, metadata }>`. Options: `password` or `privateKey`. Throws if the password or key is wrong or missing.
+- `peekEncryptionType(urlOrFragment) → number`: what a link needs before decoding it. Compare with `LinkifyInk.ENC_NONE`, `LinkifyInk.ENC_PASSWORD` (pass `{ password }`) or `LinkifyInk.ENC_ECDH` (pass `{ privateKey }`).
+- `generateKeypair()`, `exportPublicKey(key)`, `importPublicKey(raw)`: P-256 helpers for ECDH mode.
+- Static helpers that need no WASM: `LinkifyInk.base64UrlEncode(bytes)`, `LinkifyInk.base64UrlDecode(str)`, `LinkifyInk.packTar(files)`, `LinkifyInk.unpackTar(bytes)`.
+
+## Using it from the command line
+
+After downloading the two files as above, run the library with `node`. Create a link from files on disk:
+
+```sh
+node --input-type=module -e '
+import { readFile } from "node:fs/promises";
+import { basename } from "node:path";
+import { linkifyInkCodecDependencies } from "./vendor.codec.bundle.mjs";
+import { LinkifyInk } from "./linkify.ink.mjs";
+const linkify = new LinkifyInk(linkifyInkCodecDependencies);
+const files = await Promise.all(process.argv.slice(1).map(async (p) =>
+	({ name: basename(p), data: new Uint8Array(await readFile(p)) })));
+const password = process.env.LINKIFY_PASSWORD;
+console.log(await linkify.createLink(files, password ? { encryption: "password", password } : {}));
+' notes.md index.html
+```
+
+Read a link and write its files into the current directory:
+
+```sh
+node --input-type=module -e '
+import { writeFile } from "node:fs/promises";
+import { basename } from "node:path";
+import { linkifyInkCodecDependencies } from "./vendor.codec.bundle.mjs";
+import { LinkifyInk } from "./linkify.ink.mjs";
+const linkify = new LinkifyInk(linkifyInkCodecDependencies);
+const { files } = await linkify.readLink(process.argv[1], { password: process.env.LINKIFY_PASSWORD });
+for (const f of files) { await writeFile(basename(f.name), f.data); console.log(f.name, f.data.length); }
+' 'https://linkify.ink/#...'
+```
+
+Set `LINKIFY_PASSWORD` in the environment to create or read a password-protected link. Quote the URL in the shell. File names in a link come from whoever made it, so strip directories (as `basename` does above) before writing to disk.
+
+## Pages
+
+- [Editor](https://linkify.ink/): create or drop in files, preview them, and share a link.
+- [Receive](https://linkify.ink/receive): generate a recipient key for ECDH mode, and decrypt or paste in payloads.
+- [About](https://linkify.ink/about): what linkify.ink is and how it works.
+
+## Source
+
+- [Repository](https://github.com/noppa/linkify.ink): MIT licensed.
+- [README](https://raw.githubusercontent.com/noppa/linkify.ink/main/README.md): features, privacy notes, format and design.
+- [linkify.ink.js](https://linkify.ink/linkify.ink.js): the codec library source.

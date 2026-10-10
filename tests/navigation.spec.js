@@ -18,4 +18,14 @@ test.describe('navigation', () => {
 
 		await expect(page.locator('.receive-page')).toBeVisible();
 	});
+
+	test('llms.txt is served as plain text, not the app', async ({ request }) => {
+		const response = await request.get('/llms.txt');
+
+		expect(response.status()).toBe(200);
+		expect(response.headers()['content-type']).toMatch(/^text\/plain/);
+		const body = await response.text();
+		expect(body).toMatch(/^# linkify\.ink\n/);
+		expect(body).not.toContain('<html');
+	});
 });
