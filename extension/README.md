@@ -1,16 +1,29 @@
 # linkify.ink browser extension
 
-A Chrome (MV3) extension that turns the page you're reading into a linkify.ink link. It packs the capture through the same `LinkifyInk` class the site uses. Nothing is uploaded; the extension is just another consumer of the library.
+A Chrome and Firefox (MV3) extension that turns the page you're reading into a linkify.ink link. It packs the capture through the same `LinkifyInk` class the site uses. Nothing is uploaded; the extension is just another consumer of the library.
 
 The extension makes public links only. To share a capture with a password or to a recipient key, open the link in the editor and share it again from there. That's the same flow the site uses for any file, so the popup doesn't need its own copy of it.
 
 ## Building and loading
 
 ```sh
-npm run build:extension   # bundles deps and assembles extension/vendor/
+npm run build:extension   # bundles deps and assembles dist/extension/{chrome,firefox}/
 ```
 
-Then load it: `chrome://extensions` → Developer mode → **Load unpacked** → pick `extension/`.
+Then load it:
+
+- **Chrome:** `chrome://extensions` → Developer mode → **Load unpacked** → pick `dist/extension/chrome/`.
+- **Firefox:** `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on…** → pick `dist/extension/firefox/manifest.json`. (Temporary add-ons unload when Firefox quits; a permanent install needs a signed build.)
+
+### One source tree, two manifests
+
+Everything in `extension/` is shared: the popup, the background script, the content script and the icons all use the promise-based `chrome.*` API, which both browsers implement in MV3. The only real differences are in the manifest, and they live in `manifests/`:
+
+- `base.json` is everything both browsers agree on.
+- `chrome.json` declares the background as a `service_worker`.
+- `firefox.json` declares it as `background.scripts` (Firefox has no extension service workers, so it runs `background.js` as an event page) and adds `browser_specific_settings.gecko` (the add-on ID, minimum version and data-collection declaration Firefox requires).
+
+`build-extension.mjs` shallow-merges `base.json` with the target's file and copies the shared tree next to it. When something truly browser-specific turns up, add it to the target's manifest file or branch on it in code. Don't fork the shared files.
 
 ## Why size shapes everything
 

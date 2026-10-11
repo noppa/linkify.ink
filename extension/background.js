@@ -1,4 +1,5 @@
-// Background service worker — the extension's codec host.
+// Background script — the extension's codec host. A service worker in Chrome, an
+// event page in Firefox (see manifests/); the code is identical in both.
 //
 // This is the only context that touches LinkifyInk. The popup is pure UI and the
 // content script only knows about the DOM, so a popup that closes mid-capture

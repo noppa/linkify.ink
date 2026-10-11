@@ -116,7 +116,7 @@ The subdomain is named after a hash of the previewed files. That hash is salted 
 
 ## Browser extension
 
-`extension/` holds a Chrome extension that snapshots the page you're reading, either just the article or the full page, and turns it into a link for sharing. Build and install instructions and details are in [`extension/README.md`](extension/README.md).
+`extension/` holds a Chrome and Firefox extension that snapshots the page you're reading, either just the article or the full page, and turns it into a link for sharing. Build and install instructions and details are in [`extension/README.md`](extension/README.md).
 
 ## Development
 
@@ -129,7 +129,7 @@ npm test                 # Playwright end-to-end tests
 npm run typecheck        # type-check JSDoc annotations
 npm run lint             # oxlint
 npm run bundle-libs      # rebuild the vendored bundles after changing deps
-npm run build:extension  # rebuild bundles + assemble extension/vendor/
+npm run build:extension  # rebuild bundles + assemble dist/extension/{chrome,firefox}/
 ```
 
 Before the first `npm test`, install the browser with `npx playwright install chromium`.

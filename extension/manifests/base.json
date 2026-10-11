@@ -3,11 +3,11 @@
 	"name": "linkify.ink — page to link",
 	"version": "0.1.0",
 	"description": "Capture the page you're reading into a shareable linkify.ink link. Nothing is uploaded — the article lives in the URL itself.",
-	"permissions": ["activeTab", "scripting", "storage"],
-	"background": {
-		"service_worker": "background.js",
-		"type": "module"
-	},
+	"permissions": [
+		"activeTab",
+		"scripting",
+		"storage"
+	],
 	"action": {
 		"default_popup": "popup.html",
 		"default_title": "Capture this page as a linkify.ink link",
