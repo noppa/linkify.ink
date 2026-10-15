@@ -137,7 +137,7 @@ To password-protect a link, pass `{ encryption: 'password', password }` as the s
 ## Design goals
 
 - **No server-side state.** The hash fragment never leaves the browser, so the service has nothing to store, leak, or take down. A shared link works as long as the static site is up, and the decoding logic is simple enough to reimplement if it isn't.
-- **Honest end-to-end encryption.** Encryption keys are derived and used entirely in the browser. In ECDH mode, the private key is generated fresh on the receive page and never serialized anywhere.
+- **End-to-end encryption.** Encryption keys are derived and used entirely in the browser. In ECDH mode, the private key is generated fresh on the receive page and never serialized anywhere.
 - **Minimal moving parts.** The app is plain JavaScript with Preact + htm: no JSX, and no build step for the app code itself. Only the vendored npm dependencies are bundled with esbuild, into a few committed `*.bundle.js` files. Types are checked from JSDoc annotations with `tsc --noEmit`.
 - **Sandboxed previews.** Untrusted HTML/JS from a link never runs on the main origin (see next section).
 
