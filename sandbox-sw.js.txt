@@ -27,7 +27,7 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('message', (event) => {
 	if (!event.data || event.data.type !== 'files') return;
-	const { session } = event.data;
+	const { session, reload, requestId } = event.data;
 	/** @type {Map<string, Uint8Array>} */
 	const files = new Map();
 	for (const [name, bytes] of Object.entries(event.data.files)) {
@@ -40,7 +40,7 @@ self.addEventListener('message', (event) => {
 	// @ts-ignore
 	event.waitUntil(forgetClosedClients());
 	// @ts-ignore
-	event.source?.postMessage({ type: 'ready' });
+	event.source?.postMessage({ type: 'ready', reload, requestId });
 });
 
 /** Drop the sessions of loaders, and the entries of clients, that are gone. */

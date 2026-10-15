@@ -57,9 +57,12 @@
 					// Wait until this page is controlled by the SW (may need skipWaiting + claim)
 					await waitForController();
 
-					// SW sends 'ready' after storing files → show entry
+					// SW sends 'ready' after storing files → show entry, unless the
+					// files only answer a write from the preview, which stays as it is.
 					navigator.serviceWorker.addEventListener('message', (event) => {
-						if (event.data?.type === 'ready') showEntry();
+						if (event.data?.type !== 'ready') return;
+						if (event.data.reload !== false) showEntry();
+						if (event.data.requestId) answerWrite(event.data.requestId);
 					});
 
 					serviceWorkerReady = true;
@@ -269,20 +272,82 @@
 				return map[path.split('.').pop()?.toLowerCase() ?? ''] ?? 'application/octet-stream';
 			}
 
-			// Receive files from the parent (linkify.ink editor)
+			// ── Preview API ──
+
+			// The files the editor last sent, and the name of the document it
+			// rendered for the preview (markdown, code…), which isn't a project file.
+			let currentFiles = {};
+			let syntheticName = null;
+			// Write requests from the preview waiting on the editor, by the id the
+			// loader gave them: { source, origin, id }.
+			const pendingWrites = new Map();
+
+			/** Answer a message from a previewed document. */
+			function reply(source, origin, message) {
+				source.postMessage(message, origin);
+			}
+
+			// Requests from the previewed documents, which run on this origin (blob:
+			// documents of the fallback path included). README.md documents them:
+			//   { type: 'linkify.getFiles', id }
+			//     → { type: 'linkify.getFiles.result', id, files: [{ name, content }] }
+			//   { type: 'linkify.writeFiles', id, files: { [name]: contents | null } }
+			//     → { type: 'linkify.writeFiles.result', id, ok: true } or { …, error }
+			window.addEventListener('message', (event) => {
+				if (event.origin !== location.origin || !event.source) return;
+				const { type, id } = event.data ?? {};
+				if (type === 'linkify.getFiles') {
+					const files = Object.entries(currentFiles)
+						.filter(([name]) => name !== syntheticName)
+						.map(([name, content]) => ({ name, content }));
+					reply(event.source, event.origin, { type: 'linkify.getFiles.result', id, files });
+				} else if (type === 'linkify.writeFiles') {
+					const requestId = crypto.randomUUID();
+					pendingWrites.set(requestId, { source: event.source, origin: event.origin, id });
+					window.parent.postMessage(
+						{ type: 'preview-write', requestId, files: event.data.files },
+						PARENT_ORIGIN,
+					);
+				}
+			});
+
+			/** @param {string} requestId @param {string} [error] */
+			function answerWrite(requestId, error) {
+				const pending = pendingWrites.get(requestId);
+				if (!pending) return;
+				pendingWrites.delete(requestId);
+				reply(pending.source, pending.origin, {
+					type: 'linkify.writeFiles.result',
+					id: pending.id,
+					...(error ? { error } : { ok: true }),
+				});
+			}
+
+			// Messages from the parent (linkify.ink editor): the files to serve, and
+			// the editor refusing a write the preview asked for.
 			window.addEventListener('message', (event) => {
 				if (event.origin !== PARENT_ORIGIN) return;
+				if (event.data?.type === 'preview-write-result') {
+					answerWrite(event.data.requestId, String(event.data.error));
+					return;
+				}
 				if (!event.data || event.data.type !== 'files') return;
+				const { files, reload, requestId } = event.data;
 				pendingEntry = event.data.entry || 'index.html';
+				currentFiles = files;
+				syntheticName = event.data.synthetic ?? null;
 				if (!serviceWorkerReady) {
-					renderWithBlobUrls(event.data.files);
+					if (reload !== false) renderWithBlobUrls(files);
+					if (requestId) answerWrite(requestId);
 					return;
 				}
 				// Forward the file map to the SW for fetch interception.
 				navigator.serviceWorker.controller?.postMessage({
 					type: 'files',
 					session: SESSION,
-					files: event.data.files,
+					files,
+					reload,
+					requestId,
 				});
 			});
 
