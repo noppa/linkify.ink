@@ -15,6 +15,7 @@ files → tar → zstd + shared dictionary → [encrypt] → base64url → https
   - **ecdh**: encrypted to a recipient's P-256 public key. The recipient generates a keypair on https://linkify.ink/receive (or with the library) and shares the public key, a base64url string of 87 characters. Only the holder of the private key can decrypt.
 - Size: keep links under about 32,000 characters (roughly 24 KB of compressed data). Text compresses well; images and other already-compressed files don't. Chat apps often cut long links earlier. A payload too long for a clickable link can be sent as text and pasted into https://linkify.ink/receive.
 - Opening a link in a browser shows the files in an editor with a live preview (Markdown, images, and multi-file HTML/CSS/JS apps run in a sandboxed origin).
+- A previewed HTML page can read every file and write changes back with `postMessage` to `window.parent`: `{ type: 'linkify.getFiles', id }` replies `{ type: 'linkify.getFiles.result', id, files: [{ name, content }] }`; `{ type: 'linkify.writeFiles', id, files: { [name]: string | Uint8Array | null } }` replies `{ type: 'linkify.writeFiles.result', id, ok: true }` or `{ ..., error }`. Written files are kept when a new link is shared. See the Preview API section of https://github.com/noppa/linkify.ink#preview-api.
 - For a public link, whoever holds the URL holds the files. Use password or ecdh mode for anything private.
 
 ## Getting the library

@@ -11,13 +11,46 @@ It's handy for the stuff that usually ends up in a pastebin or a chat attachment
 ## Features
 
 - **In-browser editor.** Create and edit files in a multi-file editor with a sidebar, or drop in existing files from disk. Text, images, and binary files are all supported.
-- **Live preview.** Markdown, images, and even multi-file HTML/CSS/JS projects render in a sandboxed preview pane.
+- **Live preview.** Markdown, images, and even multi-file HTML/CSS/JS projects render in a sandboxed preview pane. A previewed page can read and change the project's files (see [Preview API](#preview-api)).
 - **Three sharing modes:**
   - **Public:** a plain link; anyone who has it can open it.
   - **Password:** the payload is encrypted with AES-256-GCM, using a key derived from your password with Argon2id.
   - **Recipient key (ECDH):** the recipient opens the `/receive` page, which generates an ephemeral keypair in their browser. They send you their public key, and you encrypt directly to it. Only they can decrypt, and there is no password to leak.
 - **Receive page.** Decrypts incoming payloads and lets the recipient download everything or open the files in the editor. It also handles payloads too large to survive as clickable links: paste the raw fragment in directly.
 - **Browser extension.** Turns the page you're reading into a link (see [below](#browser-extension)).
+
+## Preview API
+
+A previewed page can read the project's files and change them, so a link can carry its own tooling: an `index.html` that loads a compiler such as esbuild-wasm and builds the project's `.ts` files, or a page that lets readers annotate a document and share their notes on.
+
+The page talks to the sandbox it runs in with `postMessage` to `window.parent`; each request carries an `id`, which its reply repeats:
+
+```js
+function linkifyInk(type, data) {
+	return new Promise((resolve, reject) => {
+		const id = crypto.randomUUID();
+		addEventListener('message', function onReply(event) {
+			if (event.source !== parent || event.data?.id !== id) return;
+			removeEventListener('message', onReply);
+			event.data.error ? reject(new Error(event.data.error)) : resolve(event.data);
+		});
+		parent.postMessage({ type, id, ...data }, location.origin);
+	});
+}
+
+// Every file in the project, as { name, content } with content a Uint8Array.
+const { files } = await linkifyInk('linkify.getFiles');
+
+// Change, add or (with null) delete files. Contents can be a string (saved as
+// UTF-8), an ArrayBuffer or a typed array.
+await linkifyInk('linkify.writeFiles', {
+	files: { 'notes.md': '# My notes', 'old.txt': null },
+});
+```
+
+A write goes into the editor's files, so the next link made with **Share** carries it. In a shared link's reader view, a **Share** button appears once the preview has written something. The page that wrote isn't reloaded, so it keeps its state; once the write's promise resolves, `getFiles` and `fetch()` return the new contents. Names are relative to the project root, and ones starting with `__linkify_` are reserved.
+
+Editing a file in the editor still reloads the preview, as before.
 
 ## Privacy and security
 
@@ -26,6 +59,8 @@ linkify.ink itself never receives your files, but the URL still passes through w
 A password-protected link can be attacked offline: anyone with the link can try passwords as fast as their hardware allows, with no server to rate-limit them. The key is derived with Argon2id (64 MiB of memory, 3 iterations, parallelism 1, 16-byte random salt), which makes each guess expensive, but it can't save a weak password. Use a long one.
 
 Recipient-key mode has no password to guess. The private key is generated on the receive page and never leaves that browser tab.
+
+A previewed page can read every file in the project, including any you add after opening someone else's link, and it can reach the network. Don't add private files to a project whose preview you don't trust.
 
 ## Limits
 

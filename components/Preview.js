@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from '../vendor/vendor.ui.bundle.js';
 import { htm } from '../vendor/vendor.ui.bundle.js';
 import Icon from '../lib/icons.js';
 import { isCodeFile } from '../lib/filetypes.js';
+import { parseFileChanges } from '../lib/filechanges.js';
 
 const html = htm.bind(h);
 
@@ -21,6 +22,7 @@ function loadPreviewLibs() {
 }
 
 /** @typedef {import('../lib/types.js').FileEntry} FileEntry */
+/** @typedef {import('../lib/filechanges.js').FileChanges} FileChanges */
 
 /**
  * A rendered preview document that isn't one of the project's own files — e.g.
@@ -187,18 +189,22 @@ export function resolvePreviewFile(files, activeFile, lastHtmlName = null) {
  *   activeFile: FileEntry | null,
  *   followActiveFile?: boolean,
  *   fitToDeclaredWidth?: boolean,
+ *   onPreviewWrite?: (changes: FileChanges) => FileEntry[],
  * }} props — `followActiveFile` always previews the active file itself, even a
  *   stylesheet or script of an HTML page (the shared-link reader view, where
  *   picking a file means wanting to see it). `fitToDeclaredWidth` lays the app
  *   out at the width a fixed-width document declares, so a phone zooms out to
  *   fit it (see useFittedViewport); only for a view where the preview is
- *   the whole page.
+ *   the whole page. `onPreviewWrite` applies file changes the previewed
+ *   document asks for and returns the resulting files, which must be the array
+ *   passed back as `files`; without it, such requests are refused.
  */
 export default function Preview({
 	files,
 	activeFile,
 	followActiveFile = false,
 	fitToDeclaredWidth = false,
+	onPreviewWrite,
 }) {
 	const iframeRef = useRef(/** @type {HTMLIFrameElement | null} */ (null));
 	const sandboxRef = useRef(/** @type {Sandbox | null} */ (null));
@@ -206,6 +212,13 @@ export default function Preview({
 	// single render) send the latest contents rather than a stale snapshot.
 	const filesRef = useRef(files);
 	filesRef.current = files;
+	const onPreviewWriteRef = useRef(onPreviewWrite);
+	onPreviewWriteRef.current = onPreviewWrite;
+	// The files a write from the preview produced. They were pushed to the
+	// sandbox as part of answering it, without reloading the document that asked
+	// (it already shows what it wants, and may hold state, such as a selection,
+	// that a reload would lose), so their arrival as `files` renders nothing.
+	const writtenFilesRef = useRef(/** @type {FileEntry[] | null} */ (null));
 	// Name of the most recently *opened* HTML file, which the preview sticks to
 	// while the user edits the project's other files.
 	const lastHtmlNameRef = useRef(/** @type {string | null} */ (null));
@@ -260,6 +273,40 @@ export default function Preview({
 	}, []);
 	const fitted = useFittedViewport(fitToDeclaredWidth ? layout.width : 0);
 
+	// Writes the previewed document asks for (relayed by the loader, see
+	// sandbox-loader.html). The changes come from whatever code the files run, so
+	// they're checked before they reach the editor's files.
+	useEffect(() => {
+		/** @param {MessageEvent} event */
+		function onPreviewWriteRequest(event) {
+			if (event.data?.type !== 'preview-write') return;
+			const sandbox = sandboxRef.current;
+			const iframe = iframeRef.current;
+			if (!sandbox || !iframe || event.origin !== sandbox.origin) return;
+			if (event.source !== iframe.contentWindow) return;
+			const { requestId } = event.data;
+			const write = onPreviewWriteRef.current;
+			try {
+				if (!write) throw new Error('this view does not accept file changes');
+				const next = write(parseFileChanges(event.data.files));
+				filesRef.current = next;
+				writtenFilesRef.current = next;
+				pushFiles(iframe, sandbox, filesRef, { reload: false, requestId });
+			} catch (error) {
+				iframe.contentWindow?.postMessage(
+					{
+						type: 'preview-write-result',
+						requestId,
+						error: error instanceof Error ? error.message : String(error),
+					},
+					sandbox.origin,
+				);
+			}
+		}
+		window.addEventListener('message', onPreviewWriteRequest);
+		return () => window.removeEventListener('message', onPreviewWriteRequest);
+	}, []);
+
 	// Warm up the preview-only bundle in the background as soon as the preview
 	// mounts, so the first markdown render doesn't wait on a cold fetch.
 	useEffect(() => {
@@ -268,6 +315,8 @@ export default function Preview({
 
 	useEffect(() => {
 		if (!previewFile || !iframeRef.current) return;
+		if (files === writtenFilesRef.current) return;
+		writtenFilesRef.current = null;
 		// Edits are already debounced upstream (DebouncedTextarea commits at most
 		// once per idle interval), so render straight away. This also makes
 		// preview switches — opening a different file — instant.
@@ -697,14 +746,7 @@ function initSandbox(iframe, entry, extra, filesRef, sandboxRef) {
 			if (event.data?.type !== 'sandbox-ready') return;
 			// The loader is up and controlled by its SW — send the current files.
 			sandbox.ready = true;
-			iframe.contentWindow?.postMessage(
-				{
-					type: 'files',
-					files: buildFilesData(filesRef.current, sandbox.extra),
-					entry: sandbox.entry,
-				},
-				origin,
-			);
+			iframe.contentWindow?.postMessage(filesMessage(sandbox, filesRef.current), origin);
 		};
 
 		window.addEventListener('message', sandbox.onMessage);
@@ -792,21 +834,38 @@ function sandboxSalt() {
 let sessionSalt = null;
 
 /**
+ * The message that hands the loader the files to serve. `synthetic` names the
+ * injected document, which the loader leaves out of the file list it gives the
+ * preview.
+ * @param {Sandbox} sandbox
+ * @param {FileEntry[]} files
+ * @param {{ reload?: boolean, requestId?: string }} [options]
+ */
+function filesMessage(sandbox, files, options = {}) {
+	return {
+		type: 'files',
+		files: buildFilesData(files, sandbox.extra),
+		entry: sandbox.entry,
+		synthetic: sandbox.extra?.name ?? null,
+		...options,
+	};
+}
+
+/**
  * Push the latest files into an already-running sandbox. The loader forwards them
- * to its service worker and reloads its nested content iframe.
+ * to its service worker and reloads its nested content iframe, unless `reload`
+ * is false: then they only replace what it serves, and `requestId` names the
+ * preview's write request they answer.
  * @param {HTMLIFrameElement} iframe
  * @param {Sandbox} sandbox
  * @param {{ current: FileEntry[] }} filesRef
+ * @param {{ reload?: boolean, requestId?: string }} [options]
  */
-function pushFiles(iframe, sandbox, filesRef) {
+function pushFiles(iframe, sandbox, filesRef, options) {
 	// Not ready yet — initSandbox's sandbox-ready handler will send the latest files.
 	if (!sandbox.ready) return;
 	iframe.contentWindow?.postMessage(
-		{
-			type: 'files',
-			files: buildFilesData(filesRef.current, sandbox.extra),
-			entry: sandbox.entry,
-		},
+		filesMessage(sandbox, filesRef.current, options),
 		sandbox.origin,
 	);
 }

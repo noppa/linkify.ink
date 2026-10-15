@@ -11,10 +11,12 @@ import { guessType } from '../lib/filetypes.js';
 import { downloadFiles } from '../lib/download.js';
 import { takePendingFiles } from '../lib/transfer.js';
 import { STARTERS, DEFAULT_STARTER } from '../lib/starters.js';
+import { applyFileChanges } from '../lib/filechanges.js';
 
 const html = htm.bind(h);
 
 /** @typedef {import('../lib/types.js').FileEntry} FileEntry */
+/** @typedef {import('../lib/filechanges.js').FileChanges} FileChanges */
 
 /** @param {FileEntry[]} files */
 function isDefaultReadmeOnly(files) {
@@ -49,6 +51,10 @@ export default function EditorPage() {
 		};
 	});
 	const [files, setFiles] = useState(initial.files);
+	// Always-current files, for applying a preview's write synchronously (see
+	// applyPreviewWrite).
+	const filesRef = useRef(files);
+	filesRef.current = files;
 	const [starter, setStarter] = useState(DEFAULT_STARTER);
 	const [activeIndex, setActiveIndex] = useState(() =>
 		openingIndex(initial.files),
@@ -62,6 +68,9 @@ export default function EditorPage() {
 	const [sharedEditorOpen, setSharedEditorOpen] = useState(false);
 	// Whether the reader view shows its (read-only) file list.
 	const [readerFilesOpen, setReaderFilesOpen] = useState(false);
+	// Whether the preview has changed the files, which offers sharing them from
+	// the reader view too.
+	const [previewEdited, setPreviewEdited] = useState(false);
 	const [showShare, setShowShare] = useState(false);
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(
 		initial.files.length === 1,
@@ -268,6 +277,30 @@ export default function EditorPage() {
 		});
 	}
 
+	/**
+	 * Apply the file changes the preview asked for. Returns the new file list,
+	 * which the preview recognizes when it comes back as its `files` prop.
+	 * @param {FileChanges} changes
+	 * @returns {FileEntry[]}
+	 */
+	function applyPreviewWrite(changes) {
+		const prev = filesRef.current;
+		const next = applyFileChanges(prev, changes);
+		filesRef.current = next;
+		dirty.current = true;
+		defaultReadmeUntouched.current = false;
+		setFiles(next);
+		// Stay on the open file, wherever it moved; if it was deleted, on the
+		// file that took its place.
+		const activeName = prev[activeIndex]?.name;
+		const index = next.findIndex((f) => f.name === activeName);
+		setActiveIndex(
+			index >= 0 ? index : Math.max(0, Math.min(activeIndex, next.length - 1)),
+		);
+		setPreviewEdited(true);
+		return next;
+	}
+
 	const activeFile = files[activeIndex] ?? null;
 	const showSharedPreviewOnly =
 		initial.cameFromSharedLink && !sharedEditorOpen;
@@ -311,6 +344,13 @@ export default function EditorPage() {
 							<button class="btn" onClick=${() => downloadFiles(files)}>
 								<${Icon} name="download" /> Download
 							</button>
+							${previewEdited &&
+							html`<button
+								class="btn btn-primary"
+								onClick=${() => setShowShare(true)}
+							>
+								<${Icon} name="link" /> Share
+							</button>`}
 						</div>
 					</div>`
 				: html`<div class="topbar">
@@ -389,6 +429,7 @@ export default function EditorPage() {
 						activeFile=${activeFile}
 						followActiveFile=${showSharedPreviewOnly}
 						fitToDeclaredWidth=${showSharedPreviewOnly && !readerFilesOpen}
+						onPreviewWrite=${applyPreviewWrite}
 					/>
 				</div>
 			</div>

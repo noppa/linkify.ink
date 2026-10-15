@@ -373,6 +373,96 @@ test.describe('editor page', () => {
 		await expect(preview.locator('.code-preview code.hljs')).toContainText('margin');
 	});
 
+	test('a preview can read every file and write changes the next link keeps', async ({
+		page,
+	}) => {
+		await page.goto('/about');
+		// The page reads the file list, then writes notes.txt when its button is
+		// clicked. The counter shows whether the write reloaded the page.
+		const app = `<p id="list"></p><p id="count">0</p><button>Save</button>
+<script>
+function call(type, data) {
+	return new Promise((resolve, reject) => {
+		const id = crypto.randomUUID();
+		addEventListener('message', function onReply(event) {
+			if (event.source !== parent || event.data?.id !== id) return;
+			removeEventListener('message', onReply);
+			event.data.error ? reject(new Error(event.data.error)) : resolve(event.data);
+		});
+		parent.postMessage({ type, id, ...data }, location.origin);
+	});
+}
+call('linkify.getFiles').then(({ files }) => {
+	document.getElementById('list').textContent = files
+		.map((f) => f.name + '=' + new TextDecoder().decode(f.content).length)
+		.join(',');
+});
+document.querySelector('button').onclick = async () => {
+	document.getElementById('count').textContent++;
+	await call('linkify.writeFiles', { files: { 'notes.txt': 'annotated', 'data.txt': null } });
+	const { files } = await call('linkify.getFiles');
+	document.body.dataset.after = files.map((f) => f.name).join(',');
+	document.body.dataset.served = await (await fetch('notes.txt')).text();
+};
+</script>`;
+		const sharedUrl = await page.evaluate(async (app) => {
+			const { linkify } = await import('/lib/linkify.js');
+			const enc = (/** @type {string} */ text) => new TextEncoder().encode(text);
+			return linkify.createLink([
+				{ name: 'index.html', data: enc(app) },
+				{ name: 'data.txt', data: enc('12345') },
+			]);
+		}, app);
+		await page.goto(`/${new URL(sharedUrl).hash}`);
+
+		const preview = page.frameLocator('.preview-iframe').frameLocator('#content');
+		await expect(preview.locator('#list')).toHaveText(
+			`index.html=${app.length},data.txt=5`,
+		);
+		await expect(page.getByRole('button', { name: 'Share' })).toHaveCount(0);
+
+		await preview.getByRole('button', { name: 'Save' }).click();
+		await expect(preview.locator('body')).toHaveAttribute(
+			'data-after',
+			'index.html,notes.txt',
+		);
+		await expect(preview.locator('body')).toHaveAttribute('data-served', 'annotated');
+		await expect(preview.locator('#count')).toHaveText('1');
+		await expect(page.locator('.reader-file-name')).toHaveText('index.html');
+
+		await page.getByRole('button', { name: 'Share' }).click();
+		await page.getByRole('button', { name: 'Generate link' }).click();
+		const newUrl = /** @type {string} */ (await page.locator('.modal-url').textContent());
+		const names = await page.evaluate(async (url) => {
+			const { linkify } = await import('/lib/linkify.js');
+			const { files } = await linkify.readLink(url);
+			return files.map((f) => `${f.name}=${new TextDecoder().decode(f.data)}`);
+		}, newUrl);
+		expect(names).toEqual([`index.html=${app}`, 'notes.txt=annotated']);
+	});
+
+	test('a preview cannot write reserved or invalid file names', async ({ page }) => {
+		await page.goto('/');
+		await page.getByRole('button', { name: 'Toggle sidebar' }).click();
+		await page.locator('#starter-select').selectOption('webpage');
+		await expect(page.locator('.editor-textarea')).toHaveValue(/Hello, world!/);
+		await page.locator('.editor-textarea').fill(`<script>
+const id = 'x';
+addEventListener('message', (event) => {
+	if (event.data?.id === id) document.body.dataset.error = event.data.error;
+});
+parent.postMessage({ type: 'linkify.writeFiles', id, files: { '../up.txt': 'x' } }, location.origin);
+</script>`);
+		await page.locator('.editor-textarea').blur();
+
+		const preview = page.frameLocator('.preview-iframe').frameLocator('#content');
+		await expect(preview.locator('body')).toHaveAttribute(
+			'data-error',
+			/invalid file name/,
+		);
+		await expect(page.locator('.file-item', { hasText: 'up.txt' })).toHaveCount(0);
+	});
+
 	test('reloading a shared link keeps the shared files open', async ({ page }) => {
 		await page.goto('/about');
 		const sharedUrl = await page.evaluate(async () => {
