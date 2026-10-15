@@ -21,7 +21,7 @@ It's handy for the stuff that usually ends up in a pastebin or a chat attachment
 
 ## Preview API
 
-A previewed page can read the project's files and change them, so a link can carry its own tooling: an `index.html` that loads a compiler such as esbuild-wasm and builds the project's `.ts` files, or a page that lets readers annotate a document and share their notes on.
+A previewed page can read the project's files and change them, so a link can carry its own tooling: an `index.html` that loads a compiler such as esbuild-wasm and builds the project's `.ts` files, or a page that lets readers annotate a document and share their notes on. The editor's **TypeScript and React** starter is an example of the first.
 
 The page talks to the sandbox it runs in with `postMessage` to `window.parent`; each request carries an `id`, which its reply repeats:
 

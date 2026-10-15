@@ -155,6 +155,17 @@ test.describe('editor page', () => {
 		).toBeVisible();
 	});
 
+	test('offers a TypeScript and React starter', async ({ page }) => {
+		await page.goto('/');
+		await page.getByRole('button', { name: 'Toggle sidebar' }).click();
+
+		await page.locator('#starter-select').selectOption('react');
+
+		for (const name of ['index.html', 'main.tsx', 'App.tsx']) {
+			await expect(page.locator('.file-item', { hasText: name })).toBeVisible();
+		}
+	});
+
 	test('keeps native undo history when switching between files', async ({ page }) => {
 		await page.goto('/');
 		await page.getByRole('button', { name: 'Toggle sidebar' }).click();

@@ -89,7 +89,7 @@ export function isHtmlFile(file) {
  */
 function isPageAsset(file) {
 	const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
-	return ['css', 'js', 'mjs', 'cjs'].includes(ext);
+	return ['css', 'js', 'mjs', 'cjs', 'jsx', 'ts', 'tsx'].includes(ext);
 }
 
 const DEVICE_VIEWPORT = 'width=device-width, initial-scale=1.0';
